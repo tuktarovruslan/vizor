@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vizor</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #fff; --text: #1c2330; --muted: #6b7587; --border: #dde1e8;
+    --ok: #1a9c56; --bad: #d63a3a; --idle: #9aa3b2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #12151b; --card: #1b2029; --text: #e6e9ef; --muted: #8b95a7; --border: #2b3240;
+            --ok: #3ecf7d; --bad: #f0605d; --idle: #6b7587; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 960px; margin: 0 auto; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; }
+  .meta { color: var(--muted); font-size: 13px; }
+  button { font: inherit; padding: 4px 12px; border: 1px solid var(--border); border-radius: 6px;
+           background: var(--card); color: var(--text); cursor: pointer; }
+  .project { margin: 28px 0; }
+  .project > h2 { font-size: 17px; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
+  .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: var(--border); color: var(--muted); }
+  .badge.up { background: transparent; color: var(--ok); border: 1px solid var(--ok); }
+  .badge.down { background: transparent; color: var(--bad); border: 1px solid var(--bad); }
+  .services { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .node { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+  .node h3 { margin: 0 0 2px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .node .type { margin-left: auto; font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--idle); flex: none; }
+  .up .dot { background: var(--ok); } .down .dot { background: var(--bad); }
+  .state { font-weight: 600; font-size: 14px; } .up .state { color: var(--ok); } .down .state { color: var(--bad); }
+  dl { margin: 8px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 13px; }
+  dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
+  .links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .link { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; background: var(--card);
+          border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; }
+  .link .arrow { width: 28px; height: 3px; border-radius: 2px; background: var(--idle); position: relative; }
+  .link .arrow::after { content: ""; position: absolute; right: -1px; top: -3px; border: 4px solid transparent; border-left: 6px solid var(--idle); }
+  .link.up .arrow { background: var(--ok); } .link.up .arrow::after { border-left-color: var(--ok); }
+  .link.down .arrow { background: var(--bad); } .link.down .arrow::after { border-left-color: var(--bad); }
+  .link .label { color: var(--muted); }
+  .link .res { font-weight: 600; } .link.up .res { color: var(--ok); } .link.down .res { color: var(--bad); }
+  .empty { color: var(--muted); }
+  details { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; font-size: 13px; }
+  summary { cursor: pointer; font-weight: 600; }
+  label.int { display: inline-flex; gap: 6px; align-items: center; margin-top: 8px; }
+  input { width: 90px; font: inherit; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
+  pre { background: var(--bg); padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 12px; }
+  ul.log { list-style: none; margin: 16px 0 0; padding: 0; font: 12px/1.6 ui-monospace, Consolas, monospace; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Vizor</h1>
+    <span class="meta">обновлено: <span id="updated">—</span> · <button id="refresh">Обновить</button></span>
+  </header>
+
+  <div id="projects"><p class="empty">загрузка…</p></div>
+
+  <details>
+    <summary>Как подключить проект</summary>
+    <label class="int">Интервал, сек <input id="interval" type="number" value="5" min="1"></label>
+    <p>Vizor ищет в корне warehouse папки с файлом <code>vizor.json</code> и опрашивает описанные там сервисы.
+       Новый проект появится на странице без перезапуска. Те же манифесты использует <code>node dev.mjs</code>
+       для запуска сервисов.</p>
+<pre>{
+  "name": "my-project",
+  "services": [
+    { "id": "api", "type": "backend", "stack": "Node", "dir": "api",
+      "command": "npm run dev", "url": "http://localhost:3100", "health": "/health" }
+  ],
+  "links": [
+    { "from": "web", "to": "api", "label": "/api proxy", "via": "/api/health" }
+  ]
+}</pre>
+  </details>
+
+  <ul class="log" id="log"></ul>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let timer, prev = {};
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function row(dl, name, value) {
+  dl.append(el('dt', null, name), el('dd', null, value));
+}
+
+function renderService(s) {
+  const node = el('div', 'node ' + (s.up ? 'up' : 'down'));
+  const h = el('h3');
+  h.append(el('span', 'dot'), s.id, el('span', 'type', s.type));
+  const dl = el('dl');
+  row(dl, 'URL', s.url);
+  if (s.stack) row(dl, 'Стек', s.stack);
+  row(dl, 'Отклик', s.ms == null ? '—' : s.ms + ' мс');
+  if (s.uptime != null) row(dl, 'Аптайм', Math.round(s.uptime) + ' с');
+  node.append(h, el('div', 'state', s.up ? 'работает' : 'не запущен'), dl);
+  return node;
+}
+
+function linkText(l, services) {
+  if (l.up) return `связь есть · ${l.ms} мс`;
+  const from = services.find(s => s.id === l.from), to = services.find(s => s.id === l.to);
+  if (from && !from.up) return `${l.from} недоступен`;
+  if (to && !to.up) return `${l.to} недоступен`;
+  return 'ошибка' + (l.http ? ' HTTP ' + l.http : '');
+}
+
+function renderProject(p) {
+  const sec = el('section', 'project');
+  const allUp = p.services.every(s => s.up) && p.links.every(l => l.up);
+  const anyUp = p.services.some(s => s.up);
+  const h = el('h2', null, p.name);
+  h.append(el('span', 'badge ' + (allUp ? 'up' : anyUp ? '' : 'down'),
+    allUp ? 'всё работает' : anyUp ? 'частично' : 'остановлен'));
+  const services = el('div', 'services');
+  p.services.forEach(s => services.append(renderService(s)));
+  sec.append(h, services);
+
+  if (p.links.length) {
+    const links = el('div', 'links');
+    p.links.forEach(l => {
+      const a = el('div', 'link ' + (l.up ? 'up' : 'down'));
+      a.append(el('b', null, l.from), el('span', 'arrow'), el('b', null, l.to),
+        el('span', 'label', l.label), el('span', 'res', linkText(l, p.services)));
+      links.append(a);
+    });
+    sec.append(links);
+  }
+
+  p.services.forEach(s => note(`${p.name}/${s.id}`, s.up));
+  p.links.forEach(l => note(`${p.name}: ${l.from}→${l.to}`, l.up));
+  return sec;
+}
+
+function note(name, up) {
+  if (prev[name] === up) return;
+  if (name in prev) {
+    const li = el('li', null, `${new Date().toLocaleTimeString()}  ${name}: ${up ? 'поднялся' : 'недоступен'}`);
+    $('log').prepend(li);
+  }
+  prev[name] = up;
+}
+
+async function check() {
+  let st;
+  try {
+    st = await (await fetch('/api/status', { cache: 'no-store' })).json();
+  } catch {
+    $('updated').textContent = 'vizor недоступен';
+    return;
+  }
+  const box = $('projects');
+  box.replaceChildren(...(st.projects.length
+    ? st.projects.map(renderProject)
+    : [el('p', 'empty', 'Проекты не найдены: добавьте vizor.json в корень проекта.')]));
+  $('updated').textContent = new Date(st.checkedAt).toLocaleTimeString();
+}
+
+function schedule() {
+  clearInterval(timer);
+  timer = setInterval(check, Math.max(1, Number($('interval').value) || 5) * 1000);
+}
+$('refresh').onclick = check;
+$('interval').onchange = schedule;
+check(); schedule();
+</script>
+</body>
+</html>
