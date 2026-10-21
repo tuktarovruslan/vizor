@@ -18,3 +18,11 @@
 Для БД и прочих не-HTTP сервисов: `url` вида `tcp://host:port` без `health` — Vizor проверяет только открытость порта. Живость связи сервис → БД задаётся полем `field` у link: связь зелёная, если в JSON-ответе `via` это поле равно `ok` (например `db` в `/api/health`).
 
 Новый проект или сервис: добавь запись в `vizor.json`, перезапуск Vizor не нужен. Пример: `plus/vizor.json`.
+
+# Graphify
+
+Граф знаний проектов строит скилл `graphify` (CLI в `~/.venvs/graphify/Scripts/graphify`). Выходные файлы лежат в `<проект>/graphify-out/` и в git не попадают.
+
+- Вопросы об устройстве проекта (архитектура, кто кого вызывает, где что лежит) сначала решай по `graphify-out/GRAPH_REPORT.md` и `graph.json` (`graphify explain`, `graphify path`), и только потом читай файлы.
+- Нет `graphify-out/` у проекта — построй: `graphify update .` из корня проекта (без LLM, без затрат).
+- После правок кода обнови граф: `graphify update .`. Граф не видит Vue-файлы, `server.js` и SCSS — по ним читай исходники.
