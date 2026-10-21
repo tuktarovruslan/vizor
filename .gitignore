@@ -3,3 +3,6 @@ node_modules/
 
 # проекты — самостоятельные репозитории
 plus/
+
+# graphify
+graphify-out/
