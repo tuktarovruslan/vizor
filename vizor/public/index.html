@@ -35,6 +35,8 @@
   .up .dot { background: var(--ok); } .down .dot { background: var(--bad); }
   .state { font-weight: 600; font-size: 14px; } .up .state { color: var(--ok); } .down .state { color: var(--bad); }
   dl { margin: 8px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 13px; }
+  dd a { color: inherit; text-decoration: underline; text-decoration-color: var(--idle); text-underline-offset: 2px; }
+  dd a:hover { color: var(--ok); text-decoration-color: currentColor; }
   dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
   .links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
   .link { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; background: var(--card);
@@ -96,7 +98,19 @@ function el(tag, cls, text) {
 }
 
 function row(dl, name, value) {
-  dl.append(el('dt', null, name), el('dd', null, value));
+  const dd = el('dd', null, value);
+  dl.append(el('dt', null, name), dd);
+  return dd;
+}
+
+function urlRow(dl, url) {
+  const dd = row(dl, 'URL', '');
+  if (!/^https?:\/\//.test(url)) return dd.append(url);
+  const a = el('a', null, url);
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  dd.append(a);
 }
 
 function renderService(s) {
@@ -104,7 +118,7 @@ function renderService(s) {
   const h = el('h3');
   h.append(el('span', 'dot'), s.id, el('span', 'type', s.type));
   const dl = el('dl');
-  row(dl, 'URL', s.url);
+  urlRow(dl, s.url);
   if (s.stack) row(dl, 'Стек', s.stack);
   row(dl, 'Отклик', s.ms == null ? '—' : s.ms + ' мс');
   if (s.uptime != null) row(dl, 'Аптайм', Math.round(s.uptime) + ' с');
