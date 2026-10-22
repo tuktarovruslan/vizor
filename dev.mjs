@@ -1,7 +1,7 @@
-// Поднимает vizor и все сервисы всех проектов из vizor.json: node dev.mjs
+﻿// Поднимает vizor и все сервисы всех проектов из vizor.json: node dev.mjs
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { loadProjects, warehouseRoot } from './vizor/src/manifests.js';
+import { loadProjects, warehouseRoot } from './src/manifests.js';
 
 const COLORS = [36, 35, 32, 34, 31, 37];
 
