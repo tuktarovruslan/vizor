@@ -317,11 +317,12 @@ function build(project) {
   const visible = project.nodes.filter((n) => shown.has(floorOf(n)));
   view.hidden = project.nodes.length - visible.length;
 
-  // платформы: сервис × этаж
+  // платформы: сервис × этаж; сервис без единого файла — пустая платформа на этаже своего типа
+  const hasNodes = new Set(project.nodes.map((n) => n.service));
   const plats = floors.map((f) => {
     const list = project.services
       .map((s) => ({ s, nodes: visible.filter((n) => n.service === s.id && floorOf(n) === f.key) }))
-      .filter((p) => p.nodes.length);
+      .filter((p) => p.nodes.length || (!hasNodes.has(p.s.id) && floorOf({ layer: p.s.layer }) === f.key));
     for (const p of list) p.L = layoutPlatform(p.nodes);
     return { f, list, width: list.reduce((sum, p) => sum + p.L.width + 6, -6), depth: Math.max(18, ...list.map((p) => p.L.depth + 10)) };
   });
@@ -385,10 +386,15 @@ function buildPlatform(g, f, s, L, cx) {
   const outline = new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry), new THREE.LineBasicMaterial({ color: 0x6b7587 }));
   outline.position.copy(slab.position);
   g.add(outline);
-  const sl = label('svc', `<span class="dot"></span>${esc(s.id)} <span class="st">${esc(s.stack || s.type)}</span><span class="st state"></span>`);
+  const sl = label('svc', `<span class="dot"></span>${esc(s.id)} <span class="st">${esc(s.stack || '')}</span><span class="st state"></span>`);
   sl.position.set(cx, 0.2, -d / 2 - 0.5);
   sl.center.set(0.5, mode === '3d' ? 1 : 0);
   g.add(sl);
+  if (!L.boxes.length) {
+    const empty = label('cl', 'пока пустой');
+    empty.position.set(cx, 0.05, 0);
+    g.add(empty);
+  }
   view.platforms.push({ service: s.id, floor: f.key, outline, label: sl, group: g, localCenter: new THREE.Vector3(cx, 0, 0) });
 
   // подписи папок
@@ -702,10 +708,10 @@ function applyStatus() {
   const p = status[current];
   for (const pl of view.platforms) {
     const s = p?.services.find((x) => x.id === pl.service);
-    const state = !s ? '' : s.up ? 'up' : 'down';
+    const state = !s || s.up === null ? '' : s.up ? 'up' : 'down';
     pl.outline.material.color.setHex(state === 'up' ? 0x3ecf7d : state === 'down' ? 0xf0605d : 0x6b7587);
     pl.label.element.className = 'svc ' + state;
-    pl.label.element.querySelector('.state').textContent = !s ? '' : s.up ? '· работает' : '· не запущен';
+    pl.label.element.querySelector('.state').textContent = !s ? '' : s.up === null ? '· пока пустой' : s.up ? '· работает' : '· не запущен';
   }
 }
 

@@ -66,12 +66,13 @@ async function projectStatus(project) {
 
   const services = await Promise.all(
     project.services.map(async (s) => {
-      const r = await probe(s.url + (s.health || ''));
+      // сервис без url (заготовка, ещё ничего не запускает) не опрашивается: up = null
+      const r = s.url ? await probe(s.url + (s.health || '')) : { up: null, ms: null, data: null };
       return {
         id: s.id,
         type: s.type || 'service',
         stack: s.stack || null,
-        url: s.url,
+        url: s.url || null,
         up: r.up,
         ms: r.ms,
         uptime: r.data?.uptime ?? null,

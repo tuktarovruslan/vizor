@@ -175,15 +175,15 @@ function buildProject(name) {
 }
 
 function fillService(node, s) {
-  node.className = 'node ' + (s.up ? 'up' : 'down') + (node.classList.contains('drag') ? ' drag' : '');
+  node.className = 'node ' + (s.up ? 'up' : s.up === null ? '' : 'down') + (node.classList.contains('drag') ? ' drag' : '');
   const h = el('h3');
   h.append(el('span', 'dot'), s.id, el('span', 'type', s.type));
   const dl = el('dl');
-  urlRow(dl, s.url);
+  if (s.url) urlRow(dl, s.url);
   if (s.stack) row(dl, 'Стек', s.stack);
   row(dl, 'Отклик', s.ms == null ? '—' : s.ms + ' мс');
   if (s.uptime != null) row(dl, 'Аптайм', Math.round(s.uptime) + ' с');
-  node.replaceChildren(h, el('div', 'state', s.up ? 'работает' : 'не запущен'), dl);
+  node.replaceChildren(h, el('div', 'state', s.up ? 'работает' : s.up === null ? 'пока пустой' : 'не запущен'), dl);
 }
 
 function makeNode(ctx, id) {
@@ -302,7 +302,8 @@ function draw(ctx) {
 /* ---------- обновление данных ---------- */
 
 function updateProject(ctx, p) {
-  const allUp = p.services.every(s => s.up) && p.links.every(l => l.up);
+  // пустые сервисы (up === null) на общий статус не влияют
+  const allUp = p.services.every(s => s.up !== false) && p.links.every(l => l.up);
   const anyUp = p.services.some(s => s.up);
   ctx.badge.className = 'badge ' + (allUp ? 'up' : anyUp ? '' : 'down');
   ctx.badge.textContent = allUp ? 'всё работает' : anyUp ? 'частично' : 'остановлен';
