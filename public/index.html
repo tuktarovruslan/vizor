@@ -502,7 +502,7 @@ function buildPlatform(g, floor, s, L, cx) {
     lb.position.set(0, mode === '3d' ? -h / 2 : 0, mode === '3d' ? 0 : 1.1);
     lb.center.set(0.5, 0);
     mesh.add(lb);
-    view.nodes.set(n.id, { n, floor: f.key, mesh, label: lb, group: g, auto: [cx + p.x, p.z], frame: floor,
+    view.nodes.set(n.id, { n, floor: f.key, mesh, label: lb, group: g, auto: [cx + p.x, p.z], frame: floor, raw: { x, z },
       localBase: new THREE.Vector3(x, 0, z), localTop: new THREE.Vector3(x, h, z), ring: null, out: [], in: [] });
   }
 }
@@ -516,24 +516,92 @@ const grow = (r, m) => rect(r.x0 - m, r.x1 + m, r.z0 - m, r.z1 + m);
 
 // Рамки этажа подстраиваются под блоки: плитка папки ⊇ её блоки, платформа ⊇ её папки, этаж ⊇ платформы.
 // Меньше исходного размера рамка не становится — вернули блок, и она сжимается обратно.
-function fitFrames(floor) {
-  let fr = floor.base;
-  for (const pl of floor.plats) {
-    let pr = pl.base;
-    for (const cr of pl.clusters) {
-      let r = cr.base;
-      for (const id of cr.ids) {
-        const b = view.nodes.get(id)?.localBase;
-        if (b) r = union(r, rect(b.x - CELL / 2, b.x + CELL / 2, b.z - CELL / 2 - 1.6, b.z + CELL / 2));
+// Папки одной платформы и платформы одного этажа не накладываются: когда тащат блок (anchorId), его папка
+// и платформа стоят на месте, а те, к кому они приблизились, отъезжают вместе со своими блоками (по цепочке).
+// Положение блока = raw (место по умолчанию + сохранённый сдвиг) + отъезд его папки + отъезд его платформы.
+const CLUSTER_GAP = 2, PLATFORM_GAP = 6;
+
+// прямоугольник по блокам, не меньше исходного размера (растёт от левого верхнего угла блоков)
+function boundsOf(points, min, pad = 0) {
+  if (!points.length) return min;
+  let r = null;
+  for (const [x, z] of points) r = union(rect(x - CELL / 2, x + CELL / 2, z - CELL / 2 - 1.6, z + CELL / 2), r);
+  r = grow(r, pad);
+  return rect(r.x0, Math.max(r.x1, r.x0 + (min.x1 - min.x0)), r.z0, Math.max(r.z1, r.z0 + (min.z1 - min.z0)));
+}
+const moveRect = (r, [dx, dz]) => rect(r.x0 + dx, r.x1 + dx, r.z0 + dz, r.z1 + dz);
+
+// раздвинуть прямоугольники: неподвижный якорь толкает соседей, сдвинутые толкают дальше
+function separate(rects, anchor, gap) {
+  const shift = rects.map(() => [0, 0]);
+  if (anchor < 0) return shift;
+  const fixed = new Set([anchor]);
+  for (let pass = 0, changed = true; changed && pass < rects.length * 4; pass++) {
+    changed = false;
+    for (const i of [...fixed]) {
+      for (let j = 0; j < rects.length; j++) {
+        if (fixed.has(j)) continue;
+        const a = moveRect(rects[i], shift[i]), b = moveRect(rects[j], shift[j]);
+        const ox = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) + gap, oz = Math.min(a.z1, b.z1) - Math.max(a.z0, b.z0) + gap;
+        if (ox <= 1e-6 || oz <= 1e-6) continue;
+        // отодвигаем по оси, где пересечение меньше, — в сторону от толкающего
+        if (ox < oz) shift[j][0] += (b.x0 + b.x1 >= a.x0 + a.x1 ? 1 : -1) * ox;
+        else shift[j][1] += (b.z0 + b.z1 >= a.z0 + a.z1 ? 1 : -1) * oz;
+        fixed.add(j);
+        changed = true;
       }
+    }
+  }
+  return shift;
+}
+
+function fitFrames(floor, anchorId = null) {
+  const nodesOf = (cr) => cr.ids.map((id) => view.nodes.get(id)).filter(Boolean);
+  // 1. папки внутри каждой платформы
+  const platRects = [];
+  for (const pl of floor.plats) {
+    const raw = pl.clusters.map((cr) => boundsOf(nodesOf(cr).map((v) => [v.raw.x, v.raw.z]), cr.base));
+    const anchor = pl.clusters.findIndex((cr) => cr.ids.includes(anchorId));
+    pl.clusterShift = separate(raw, anchor, CLUSTER_GAP);
+    const placed = raw.map((r, i) => moveRect(r, pl.clusterShift[i]));
+    // платформа ⊇ её папки с отступом 1.5, не меньше исходного размера; пустая — как была
+    let pr = null;
+    for (const r of placed) pr = union(grow(r, 1.5), pr);
+    pl.rawRect = pr ? rect(pr.x0, Math.max(pr.x1, pr.x0 + (pl.base.x1 - pl.base.x0)), pr.z0, Math.max(pr.z1, pr.z0 + (pl.base.z1 - pl.base.z0))) : pl.base;
+    platRects.push(pl.rawRect);
+  }
+  // 2. платформы внутри этажа
+  const platAnchor = floor.plats.findIndex((pl) => pl.clusters.some((cr) => cr.ids.includes(anchorId)));
+  const platShift = separate(platRects, platAnchor, PLATFORM_GAP);
+
+  // 3. итоговые места блоков и рамки
+  const moved = new Set();
+  let fr = floor.base;
+  floor.plats.forEach((pl, pi) => {
+    const [px, pz] = platShift[pi];
+    pl.clusters.forEach((cr, ci) => {
+      const [cx, cz] = pl.clusterShift[ci];
+      const pts = [];
+      for (const v of nodesOf(cr)) {
+        const x = v.raw.x + cx + px, z = v.raw.z + cz + pz;
+        if (Math.abs(v.localBase.x - x) > 1e-6 || Math.abs(v.localBase.z - z) > 1e-6) {
+          v.localBase.x = v.localTop.x = v.mesh.position.x = x;
+          v.localBase.z = v.localTop.z = v.mesh.position.z = z;
+          for (const ring of [v.ring, v.docRing]) if (ring) ring.position.set(x, ring.position.y, z);
+          placeNode(v);
+          moved.add(v);
+        }
+        pts.push([x, z]);
+      }
+      const r = boundsOf(pts, moveRect(cr.base, [cx + px, cz + pz]));
       if (cr.tile) {
         cr.tile.position.set((r.x0 + r.x1) / 2, 0.02, (r.z0 + r.z1) / 2);
         cr.tile.scale.set(r.x1 - r.x0 + 0.6, r.z1 - r.z0 + 0.4, 1);
         cr.label.position.set(r.x0 + 0.2, 0.05, r.z0 + 0.7);
         cr.view.w = r.x1 - r.x0;
       }
-      pr = union(pr, grow(r, 1.5));
-    }
+    });
+    const pr = moveRect(pl.rawRect, [px, pz]);
     for (const o of [pl.slab, pl.outline]) {
       o.position.set((pr.x0 + pr.x1) / 2, -0.2, (pr.z0 + pr.z1) / 2);
       o.scale.set(pr.x1 - pr.x0, 1, pr.z1 - pr.z0);
@@ -542,13 +610,14 @@ function fitFrames(floor) {
     pl.localCenter.set((pr.x0 + pr.x1) / 2, 0, (pr.z0 + pr.z1) / 2);
     pl.center = pl.group.localToWorld(pl.localCenter.clone());
     fr = union(fr, grow(pr, 3));
-  }
+  });
   for (const o of [floor.plane, floor.border]) {
     o.position.set((fr.x0 + fr.x1) / 2, -0.3, (fr.z0 + fr.z1) / 2);
     o.scale.set(fr.x1 - fr.x0, fr.z1 - fr.z0, 1);
   }
   floor.label.position.set(fr.x0 - 1, 0, mode === '3d' ? (fr.z0 + fr.z1) / 2 : fr.z0 + 3);
   floor.rect = fr;
+  return moved;
 }
 
 // 2D: этажи — полосы сверху вниз с постоянным зазором. Этаж-якорь (тот, где тащат блок) стоит на месте,
@@ -732,7 +801,10 @@ function fitCamera() {
     pos = new THREE.Vector3(center.x + r * 0.45, center.y + r * 0.55, center.z + r * 1.05);
   } else {
     const fov = THREE.MathUtils.degToRad(camera.fov);
-    r = (Math.max(size.y, size.x / camera.aspect) / 2 / Math.tan(fov / 2)) * 1.12 + 6;
+    // слева от этажей стоят их подписи (до ~24 единиц) — оставляем им место
+    const LABEL_W = 24;
+    center.x -= LABEL_W / 2;
+    r = (Math.max(size.y, (size.x + LABEL_W) / camera.aspect) / 2 / Math.tan(fov / 2)) * 1.12 + 6;
     pos = new THREE.Vector3(center.x, center.y, center.z + r);
   }
   scene.fog.near = r * 1.6;
@@ -907,13 +979,12 @@ function moveDragged(ev) {
   const hit = planeHit(ev, new THREE.Vector3());
   if (!hit) return;
   const local = v.group.worldToLocal(hit.sub(drag.grab));
-  v.localBase.x = v.localTop.x = v.mesh.position.x = local.x;
-  v.localBase.z = v.localTop.z = v.mesh.position.z = local.z;
-  for (const ring of [v.ring, v.docRing]) if (ring) ring.position.set(local.x, ring.position.y, local.z);
-  placeNode(v);
-  fitFrames(v.frame);
+  v.raw.x = local.x;
+  v.raw.z = local.z;
+  // блок встаёт под курсор, соседние папки и платформы отъезжают; связи перекладываются у всех сдвинутых
+  const moved = fitFrames(v.frame, v.n.id);
   if (mode === '2d') restackFloors(v.frame);
-  for (const rec of view.edges) if (rec.a === v || rec.b === v || rec.e.kind === 'service') refreshEdge(rec);
+  for (const rec of view.edges) if (moved.has(rec.a) || moved.has(rec.b) || rec.e.kind === 'service') refreshEdge(rec);
 }
 
 function endDrag() {
@@ -923,19 +994,31 @@ function endDrag() {
   controls.enabled = true;
   renderer.domElement.style.cursor = 'grab';
   if (!moving) return;
-  (offsets[current] ||= {})[id] = [v.localBase.x - v.auto[0], v.localBase.z - v.auto[1]];
+  // запоминаем места всех блоков этажа, которые сдвинулись (и тот, что тащили, и отъехавших соседей)
+  const saved = (offsets[current] ||= {});
+  for (const u of view.nodes.values()) {
+    if (u.frame !== v.frame) continue;
+    const dx = u.localBase.x - u.auto[0], dz = u.localBase.z - u.auto[1];
+    if (u === v || Math.abs(u.localBase.x - u.raw.x) > 1e-6 || Math.abs(u.localBase.z - u.raw.z) > 1e-6) saved[u.n.id] = [dx, dz];
+    u.raw.x = u.localBase.x;
+    u.raw.z = u.localBase.z;
+  }
+  fitFrames(v.frame);
   savePref('offsets', offsets);
   $('resetLayout').disabled = false;
 }
 
 renderer.domElement.addEventListener('pointermove', (ev) => {
-  if (drag) return moveDragged(ev);
+  if (drag) return;
   const id = pick(ev);
   renderer.domElement.style.cursor = id ? 'grab' : '';
   if (id !== hovered) { hovered = id; applyHighlight(); }
 });
-renderer.domElement.addEventListener('pointerup', endDrag);
-renderer.domElement.addEventListener('pointercancel', endDrag);
+// перетаскивание слушаем на всём окне: курсор может уйти на панель, а отпустить блок можно где угодно
+addEventListener('pointermove', (ev) => { if (drag) moveDragged(ev); });
+addEventListener('pointerup', endDrag);
+addEventListener('pointercancel', endDrag);
+addEventListener('blur', endDrag);
 $('resetLayout').onclick = () => {
   delete offsets[current];
   savePref('offsets', offsets);
