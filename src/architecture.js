@@ -251,7 +251,7 @@ export async function buildArchitecture(project) {
         const rn = { id, service: n.service, layer: 'backend', label: p, kind: 'route', path: f, cluster: 'API', files: [f], mtime: n.mtime };
         nodes.set(id, rn);
         routes.push({ path: p, service: svc.id, node: rn });
-        addEdge(n, rn, 'route');
+        addEdge(rn, n, 'route'); // запрос приходит на адрес и обрабатывается в файле
       }
     }
   }
