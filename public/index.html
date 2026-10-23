@@ -73,7 +73,7 @@
   .m-get { background: #61affe; } .m-post { background: #49cc90; } .m-put { background: #fca130; } .m-patch { background: #50e3c2; } .m-delete { background: #f93e3e; }
 
   /* подписи в сцене */
-  .lbl { font-size: 11px; color: #cfd6e2; white-space: nowrap; text-shadow: 0 1px 3px #000, 0 0 2px #000; padding-top: 4px; transition: opacity .2s; }
+  .lbl { font-size: 11px; color: #cfd6e2; white-space: nowrap; text-shadow: 0 1px 3px #000, 0 0 2px #000; padding-top: 4px; transition: opacity .3s ease; }
   .lbl.recent { color: var(--recent); font-weight: 600; }
   .lbl.hl { color: #fff; font-weight: 600; font-size: 12px; }
   .cl { overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: #9fb0c9; white-space: nowrap; text-shadow: 0 1px 3px #000; letter-spacing: .03em; }
@@ -313,6 +313,7 @@ const HEIGHT = { tall: 2.6, cyl: 1.6, ball: 1.9, cone: 1.8, flat: 0.5, cube: 1.6
 
 function disposeWorld() {
   if (!world) return;
+  fades.clear();
   world.traverse((o) => {
     if (o.isCSS2DObject) o.element.remove();
     if (o.geometry && !Object.values(GEOMS).includes(o.geometry)) o.geometry.dispose();
@@ -497,7 +498,7 @@ function addEdgeObject(e, a, b) {
   if (e.kind === 'api' || e.kind === 'db' || e.kind === 'service') {
     // бегущие точки показывают направление запроса
     for (let i = 0; i < 3; i++) {
-      const dot = new THREE.Mesh(new THREE.SphereGeometry(e.kind === 'service' ? 0.35 : 0.22, 10, 8), new THREE.MeshBasicMaterial({ color: meta.color }));
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(e.kind === 'service' ? 0.35 : 0.22, 10, 8), new THREE.MeshBasicMaterial({ color: meta.color, transparent: true }));
       world.add(dot);
       view.particles.push({ dot, curve, t: i / 3, edge: e });
     }
@@ -617,21 +618,38 @@ function neighbours(id) {
   return set;
 }
 
+// Подсветка меняется плавно: прозрачность материалов доводится до цели за FADE_MS (подписи — CSS-переходом той же длины)
+const FADE_MS = 300;
+const fades = new Map();   // материал → { from, to, t0 }
+function fadeTo(mat, to) {
+  const f = fades.get(mat);
+  if ((f ? f.to : mat.opacity) === to) return;
+  fades.set(mat, { from: mat.opacity, to, t0: performance.now() });
+}
+function stepFades(now) {
+  for (const [mat, f] of fades) {
+    const t = Math.min(1, (now - f.t0) / FADE_MS);
+    const k = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;   // ease-in-out
+    mat.opacity = f.from + (f.to - f.from) * k;
+    if (t >= 1) fades.delete(mat);
+  }
+}
+
 function applyHighlight() {
   if (!view) return;
   const focus = hovered || selected;
   const near = focus ? neighbours(focus) : null;
   for (const [id, v] of view.nodes) {
     const on = !near || near.has(id);
-    v.mesh.material.opacity = on ? 1 : 0.15;
+    fadeTo(v.mesh.material, on ? 1 : 0.15);
     v.label.element.style.opacity = on ? '' : '0.15';
     v.label.element.classList.toggle('hl', id === focus);
   }
   for (const r of view.edges) {
     const on = !focus || r.e.from === focus || r.e.to === focus;
-    r.obj.material.opacity = on ? (focus ? 1 : r.base) : 0.04;
+    fadeTo(r.obj.material, on ? (focus ? 1 : r.base) : 0.04);
   }
-  for (const p of view.particles) p.dot.visible = !focus || p.edge.from === focus || p.edge.to === focus;
+  for (const p of view.particles) fadeTo(p.dot.material, !focus || p.edge.from === focus || p.edge.to === focus ? 1 : 0);
 }
 
 function ago(ms) {
@@ -871,6 +889,7 @@ const clock = new THREE.Clock();
 const tmp = new THREE.Vector3();
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
+  stepFades(performance.now());
   if (flight) {
     flight.t = Math.min(1, flight.t + dt * 1.4);
     const k = 1 - Math.pow(1 - flight.t, 3);
