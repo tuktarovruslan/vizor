@@ -36,7 +36,8 @@
   .layer .n { color: var(--muted); font-size: 12px; }
   #top .meta { margin-left: auto; color: var(--muted); font-size: 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   #top .meta a { color: var(--text); }
-  #home { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 3px 10px; }
+  #home, #resetLayout { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 3px 10px; }
+  #resetLayout:disabled { opacity: .4; cursor: default; }
 
   #legend { left: 12px; bottom: 12px; padding: 10px 14px; font-size: 12px; max-width: 300px; }
   #legend h2, #recent h2 { font-size: 12px; margin: 0 0 6px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
@@ -136,6 +137,7 @@
   <span class="meta">
     <span id="updated">—</span>
     <button id="home">Общий вид</button>
+    <button id="resetLayout" title="Вернуть перетащенные блоки этого проекта на места по умолчанию">Сбросить расположение</button>
     <a href="/status">Статус сервисов</a>
   </span>
 </header>
@@ -236,6 +238,8 @@ const hiddenServices = loadPref('hiddenServices', {});
 let servicesParam = params.get('services') ? params.get('services').split(',') : null;   // /?services=showcase — показать только эти
 const hiddenSvc = () => new Set(hiddenServices[current] || []);
 let nodeParam = params.get('node');
+// перетащенные блоки: { проект: { id: [dx, dz] } } — сдвиг от места по умолчанию в плоскости этажа, общий для 2D и 3D
+const offsets = loadPref('offsets', {});
 
 /* ---------- сцена ---------- */
 
@@ -350,6 +354,7 @@ function disposeWorld() {
 // Каждый этаж строится в своей группе как горизонтальная плоскость.
 // В 2D группа поворачивается на 90° к зрителю: глубина становится высотой на экране.
 function build(project) {
+  if (window.vizorDebug) window.vizorDebug.builds++;
   disposeWorld();
   world = new THREE.Group();
   scene.add(world);
@@ -395,10 +400,7 @@ function build(project) {
     }
   }
   world.updateMatrixWorld(true);
-  for (const v of view.nodes.values()) {
-    v.base = v.group.localToWorld(v.localBase.clone());
-    v.anchor = v.group.localToWorld(mode === '3d' ? v.localTop.clone() : v.localBase.clone().setY(v.localTop.y + 0.4));
-  }
+  for (const v of view.nodes.values()) placeNode(v);
   for (const pl of view.platforms) pl.center = pl.group.localToWorld(pl.localCenter.clone());
 
   buildEdges(project, visible);
@@ -469,8 +471,10 @@ function buildPlatform(g, f, s, L, cx) {
     const k = KINDS[n.kind] || KINDS.module;
     const p = L.pos.get(n.id);
     const h = HEIGHT[k.shape];
+    const [dx, dz] = offsets[current]?.[n.id] || [0, 0];
+    const x = cx + p.x + dx, z = p.z + dz;
     const mesh = new THREE.Mesh(GEOMS[k.shape], new THREE.MeshStandardMaterial({ color: k.color, roughness: 0.45, metalness: 0.1, transparent: true, emissive: 0x000000 }));
-    mesh.position.set(cx + p.x, h / 2, p.z);
+    mesh.position.set(x, h / 2, z);
     if (k.shape === 'cone') mesh.rotation.y = Math.PI / 4;
     mesh.userData.id = n.id;
     g.add(mesh);
@@ -479,8 +483,15 @@ function buildPlatform(g, f, s, L, cx) {
     lb.position.set(0, mode === '3d' ? -h / 2 : 0, mode === '3d' ? 0 : 1.1);
     lb.center.set(0.5, 0);
     mesh.add(lb);
-    view.nodes.set(n.id, { n, floor: f.key, mesh, label: lb, group: g, localBase: new THREE.Vector3(cx + p.x, 0, p.z), localTop: new THREE.Vector3(cx + p.x, h, p.z), ring: null, out: [], in: [] });
+    view.nodes.set(n.id, { n, floor: f.key, mesh, label: lb, group: g, auto: [cx + p.x, p.z],
+      localBase: new THREE.Vector3(x, 0, z), localTop: new THREE.Vector3(x, h, z), ring: null, out: [], in: [] });
   }
+}
+
+// мировые точки узла: основание (для камеры и колец) и точка крепления связей
+function placeNode(v) {
+  v.base = v.group.localToWorld(v.localBase.clone());
+  v.anchor = v.group.localToWorld(mode === '3d' ? v.localTop.clone() : v.localBase.clone().setY(v.localTop.y + 0.4));
 }
 
 /* ---------- связи ---------- */
@@ -512,23 +523,41 @@ function addEdgeObject(e, a, b) {
   const curve = curveBetween(a, b, e.kind);
   let obj;
   if (e.kind === 'via') {
-    obj = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(40)), new THREE.LineDashedMaterial({ color: meta.color, dashSize: 0.8, gapSize: 0.5, transparent: true, opacity: 0.8 }));
+    obj = new THREE.Line(edgeGeometry(e.kind, curve), new THREE.LineDashedMaterial({ color: meta.color, dashSize: 0.8, gapSize: 0.5, transparent: true, opacity: 0.8 }));
     obj.computeLineDistances();
   } else if (e.kind === 'import' || e.kind === 'route') {
-    obj = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(24)), new THREE.LineBasicMaterial({ color: meta.color, transparent: true, opacity: e.kind === 'route' ? 0.7 : 0.35 }));
+    obj = new THREE.Line(edgeGeometry(e.kind, curve), new THREE.LineBasicMaterial({ color: meta.color, transparent: true, opacity: e.kind === 'route' ? 0.7 : 0.35 }));
   } else {
-    obj = new THREE.Mesh(new THREE.TubeGeometry(curve, 40, e.kind === 'service' ? 0.18 : 0.09, 6), new THREE.MeshBasicMaterial({ color: meta.color, transparent: true, opacity: 0.75 }));
+    obj = new THREE.Mesh(edgeGeometry(e.kind, curve), new THREE.MeshBasicMaterial({ color: meta.color, transparent: true, opacity: 0.75 }));
   }
+  const rec = { e, obj, base: obj.material.opacity, a, b, dots: [] };
   if (e.kind === 'api' || e.kind === 'db' || e.kind === 'service') {
     // бегущие точки показывают направление запроса
     for (let i = 0; i < 3; i++) {
       const dot = new THREE.Mesh(new THREE.SphereGeometry(e.kind === 'service' ? 0.35 : 0.22, 10, 8), new THREE.MeshBasicMaterial({ color: meta.color, transparent: true }));
       world.add(dot);
-      view.particles.push({ dot, curve, t: i / 3, edge: e });
+      const particle = { dot, curve, t: i / 3, edge: e };
+      view.particles.push(particle);
+      rec.dots.push(particle);
     }
   }
   world.add(obj);
-  view.edges.push({ e, obj, base: obj.material.opacity });
+  view.edges.push(rec);
+}
+
+function edgeGeometry(kind, curve) {
+  if (kind === 'via') return new THREE.BufferGeometry().setFromPoints(curve.getPoints(40));
+  if (kind === 'import' || kind === 'route') return new THREE.BufferGeometry().setFromPoints(curve.getPoints(24));
+  return new THREE.TubeGeometry(curve, 40, kind === 'service' ? 0.18 : 0.09, 6);
+}
+
+// связь заново прокладывается между текущими положениями концов (после перетаскивания блока)
+function refreshEdge(rec) {
+  const curve = curveBetween(rec.a, rec.b, rec.e.kind);
+  rec.obj.geometry.dispose();
+  rec.obj.geometry = edgeGeometry(rec.e.kind, curve);
+  if (rec.e.kind === 'via') rec.obj.computeLineDistances();
+  for (const p of rec.dots) p.curve = curve;
 }
 
 // Связи между видимыми блоками. Если путь идёт через скрытые слои (например фронтенд → API → логика → таблица,
@@ -596,8 +625,8 @@ function applyControls() {
     ? { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
     : { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   $('hint').textContent = mode === '3d'
-    ? 'Тяните мышью — вращать, колесо — приблизить, правая кнопка — сдвинуть. Клик по блоку — подробности и связи.'
-    : 'Тяните мышью — сдвинуть, колесо — приблизить. Клик по блоку — подробности и связи.';
+    ? 'Тяните мышью — вращать, колесо — приблизить, правая кнопка — сдвинуть. Блок можно перетащить. Клик по блоку — подробности и связи.'
+    : 'Тяните мышью — сдвинуть, колесо — приблизить. Блок можно перетащить. Клик по блоку — подробности и связи.';
 }
 
 function fitCamera() {
@@ -752,11 +781,72 @@ function pick(ev) {
   const hit = ray.intersectObjects([...view.nodes.values()].map((v) => v.mesh), false)[0];
   return hit?.object.userData.id || null;
 }
-renderer.domElement.addEventListener('pointermove', (ev) => {
+/* перетаскивание блока: он скользит по плоскости своего этажа (в 3D — горизонтально, в 2D — по экрану).
+   Слушатель на родителе в фазе захвата срабатывает раньше OrbitControls и отключает вращение/сдвиг камеры. */
+const DRAG_START_PX = 4;
+let drag = null;
+const dragPlane = new THREE.Plane();
+const tmpQ = new THREE.Quaternion();
+function planeHit(ev, out) {
+  const r = renderer.domElement.getBoundingClientRect();
+  pointer.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(pointer, camera);
+  return ray.ray.intersectPlane(dragPlane, out);
+}
+$('scene').addEventListener('pointerdown', (ev) => {
+  if (ev.button !== 0) return;
   const id = pick(ev);
-  renderer.domElement.style.cursor = id ? 'pointer' : '';
+  if (!id) return;
+  const v = view.nodes.get(id);
+  const normal = new THREE.Vector3(0, 1, 0).applyQuaternion(v.group.getWorldQuaternion(tmpQ));
+  dragPlane.setFromNormalAndCoplanarPoint(normal, v.base);
+  const hit = planeHit(ev, new THREE.Vector3());
+  if (!hit) return;
+  drag = { id, v, grab: hit.sub(v.base), x0: ev.clientX, y0: ev.clientY, moving: false };
+  controls.enabled = false;
+  renderer.domElement.setPointerCapture(ev.pointerId);
+}, { capture: true });
+
+function moveDragged(ev) {
+  const { v } = drag;
+  if (!drag.moving && Math.hypot(ev.clientX - drag.x0, ev.clientY - drag.y0) < DRAG_START_PX) return;
+  drag.moving = true;
+  renderer.domElement.style.cursor = 'grabbing';
+  const hit = planeHit(ev, new THREE.Vector3());
+  if (!hit) return;
+  const local = v.group.worldToLocal(hit.sub(drag.grab));
+  v.localBase.x = v.localTop.x = v.mesh.position.x = local.x;
+  v.localBase.z = v.localTop.z = v.mesh.position.z = local.z;
+  for (const ring of [v.ring, v.docRing]) if (ring) ring.position.set(local.x, ring.position.y, local.z);
+  placeNode(v);
+  for (const rec of view.edges) if (rec.a === v || rec.b === v) refreshEdge(rec);
+}
+
+function endDrag() {
+  if (!drag) return;
+  const { id, v, moving } = drag;
+  drag = null;
+  controls.enabled = true;
+  renderer.domElement.style.cursor = 'grab';
+  if (!moving) return;
+  (offsets[current] ||= {})[id] = [v.localBase.x - v.auto[0], v.localBase.z - v.auto[1]];
+  savePref('offsets', offsets);
+  $('resetLayout').disabled = false;
+}
+
+renderer.domElement.addEventListener('pointermove', (ev) => {
+  if (drag) return moveDragged(ev);
+  const id = pick(ev);
+  renderer.domElement.style.cursor = id ? 'grab' : '';
   if (id !== hovered) { hovered = id; applyHighlight(); }
 });
+renderer.domElement.addEventListener('pointerup', endDrag);
+renderer.domElement.addEventListener('pointercancel', endDrag);
+$('resetLayout').onclick = () => {
+  delete offsets[current];
+  savePref('offsets', offsets);
+  rebuild(false);
+};
 renderer.domElement.addEventListener('pointerdown', (ev) => { downAt = [ev.clientX, ev.clientY]; });
 renderer.domElement.addEventListener('pointerup', (ev) => {
   if (!downAt || Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]) > 5) return;
@@ -837,6 +927,7 @@ async function pollStatus() {
 function renderControls() {
   $('tabs').innerHTML = data.projects.map((p) => `<button class="chip" data-p="${esc(p.name)}" aria-pressed="${p.name === current}">${esc(p.name)}</button>`).join('');
   document.querySelectorAll('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === mode));
+  $('resetLayout').disabled = !Object.keys(offsets[current] || {}).length;
   const p = data.projects.find((x) => x.name === current);
   const off = hiddenSvc();
   const counts = Object.fromEntries(FLOORS.map((f) => [f.key, 0]));
@@ -903,7 +994,10 @@ function show() {
   const p = data.projects.find((x) => x.name === current);
   if (!p) return;
   // структура меняется → перестроить сцену; меняется только время правки → обновить подсветку
-  const sig = current + JSON.stringify([p.services, p.links, p.nodes.map((n) => n.id + n.kind), p.edges.map((e) => e.from + '>' + e.to + e.kind)]);
+  // структуру сравниваем без учёта порядка узлов и связей
+  const sig = current + JSON.stringify([p.services, p.links, p.nodes.map((n) => n.id + n.kind).sort(), p.edges.map((e) => e.from + '>' + e.to + e.kind).sort()]);
+  // пока блок тащат, схему не перестраиваем — перестроим на следующем опросе
+  if (sig !== signature && drag) return;
   if (sig !== signature) {
     const first = !signature && !world;
     signature = sig;
@@ -988,6 +1082,9 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);
 });
+
+// доступ к состоянию схемы из консоли браузера — для отладки и автопроверок
+window.vizorDebug = { get view() { return view; }, get drag() { return drag; }, builds: 0 };
 
 applyControls();
 pollArchitecture();

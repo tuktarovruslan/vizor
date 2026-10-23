@@ -237,16 +237,19 @@ export async function buildArchitecture(project) {
     return null;
   }
 
-  const texts = new Map();
   const sources = allFiles.filter((f) => SOURCE_EXT.has(path.posix.extname(f)) && serviceOfFile(f));
-  await Promise.all(
+  const read = await Promise.all(
     sources.map(async (f) => {
       try {
         const [text, st] = await Promise.all([readFile(path.join(root, f), 'utf8'), stat(path.join(root, f))]);
-        texts.set(f, { text, mtime: st.mtimeMs });
-      } catch { /* файл исчез между обходом и чтением */ }
+        return [f, { text, mtime: st.mtimeMs }];
+      } catch {
+        return null; // файл исчез между обходом и чтением
+      }
     }),
   );
+  // порядок файлов — как при обходе, а не как завершилось чтение: иначе узлы приходят каждый раз в разном порядке
+  const texts = new Map(read.filter(Boolean));
 
   // 1. Узлы и импорты
   for (const [f, { text }] of texts) {
