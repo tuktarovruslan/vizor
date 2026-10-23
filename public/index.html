@@ -80,17 +80,13 @@
   .svc .st { font-weight: 400; color: var(--muted); font-size: 12px; }
   .floor { font-size: 20px; font-weight: 700; letter-spacing: .08em; white-space: nowrap; opacity: .85; text-shadow: 0 2px 6px #000; text-align: right; }
   .floor small { display: block; font-size: 12px; font-weight: 400; letter-spacing: 0; color: var(--muted); }
-  /* «ФРОНТЕНД» открывает адрес, где развёрнут фронтенд */
-  .floor.link { pointer-events: auto; cursor: pointer; }
-  .floor.link > span { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 5px; text-decoration-color: transparent; transition: text-decoration-color .15s; }
-  .floor.link:hover > span { text-decoration-color: currentColor; }
-  .floor.link > span::after { content: " ↗"; font-size: 15px; }
-  #pick { position: fixed; z-index: 20; padding: 6px; min-width: 220px; display: none; }
-  #pick.open { display: block; }
-  #pick .cap { color: var(--muted); font-size: 12px; padding: 4px 8px; }
-  #pick a { display: flex; gap: 10px; justify-content: space-between; padding: 6px 8px; border-radius: 8px; text-decoration: none; }
-  #pick a:hover { background: rgba(79, 140, 255, .18); }
-  #pick a small { color: var(--muted); }
+  /* под «ФРОНТЕНД» — ссылки на видимые фронтенды */
+  .floor .sites { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin-top: 6px; pointer-events: auto; }
+  .floor .sites a { font-size: 13px; font-weight: 600; letter-spacing: 0; color: var(--text); text-decoration: none; display: inline-flex; gap: 8px; align-items: baseline;
+                    padding: 2px 8px; border-radius: 7px; background: rgba(13, 16, 22, .88); border: 1px solid var(--border); text-shadow: none; }
+  .floor .sites a:hover { border-color: #9cc0ff; }
+  .floor .sites a small { display: inline; font-weight: 400; color: var(--muted); }
+  .floor .sites a:hover { color: #9cc0ff; } .floor .sites a:hover small { color: #9cc0ff; }
   .floor.empty { opacity: .45; }
 
   #msg { position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
@@ -141,7 +137,6 @@
 </aside>
 
 <aside id="info" class="panel" aria-live="polite"></aside>
-<div id="pick" class="panel" role="menu"></div>
 
 <script type="module">
 import * as THREE from 'three';
@@ -397,16 +392,11 @@ function buildFloor(g, fp, span) {
   fl.position.set(-span / 2 - 1, 0, mode === '3d' ? 0 : -fp.depth / 2 + 3);
   fl.center.set(1, mode === '3d' ? 0.5 : 0);
   g.add(fl);
-  // фронтенд открывается по клику: один адрес — сразу, несколько — меню выбора
+  // под «ФРОНТЕНД» — ссылки на фронтенды выбранных сервисов
   const sites = f.key === 'frontend' ? fp.list.filter((p) => /^https?:\/\//.test(p.s.url || '')) : [];
   if (sites.length) {
-    fl.element.classList.add('link');
-    fl.element.title = sites.length === 1 ? `Открыть ${sites[0].s.url}` : 'Выбрать, какой фронтенд открыть';
-    fl.element.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      if (sites.length === 1) window.open(sites[0].s.url, '_blank', 'noopener');
-      else openPick(ev, sites.map((p) => p.s));
-    });
+    fl.element.insertAdjacentHTML('beforeend', '<div class="sites">' + sites.map(({ s }) =>
+      `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" title="Открыть ${esc(s.url)}">${esc(s.id)} <small>${esc(s.url.replace(/^https?:\/\//, ''))} ↗</small></a>`).join('') + '</div>');
   }
 }
 
@@ -710,19 +700,7 @@ renderer.domElement.addEventListener('pointerup', (ev) => {
   if (!downAt || Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]) > 5) return;
   select(pick(ev));
 });
-addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { closePick(); select(null); } });
-
-function openPick(ev, services) {
-  const box = $('pick');
-  box.innerHTML = '<div class="cap">Открыть фронтенд</div>' + services.map((s) =>
-    `<a role="menuitem" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.id)} <small>${esc(s.url.replace(/^https?:\/\//, ''))}</small></a>`).join('');
-  box.classList.add('open');
-  box.style.left = Math.min(ev.clientX, innerWidth - box.offsetWidth - 8) + 'px';
-  box.style.top = Math.min(ev.clientY + 8, innerHeight - box.offsetHeight - 8) + 'px';
-}
-function closePick() { $('pick').classList.remove('open'); }
-$('pick').addEventListener('click', (ev) => { if (ev.target.closest('a')) closePick(); });
-addEventListener('pointerdown', (ev) => { if (!ev.target.closest('#pick, .floor.link')) closePick(); });
+addEventListener('keydown', (ev) => { if (ev.key === 'Escape') select(null); });
 
 /* ---------- недавние изменения ---------- */
 
