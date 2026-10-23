@@ -105,6 +105,7 @@
     <button data-mode="2d">2D</button><button data-mode="3d">3D</button>
   </div>
   <div id="layers" class="group" role="group" aria-label="Слои"><span class="cap">Слои:</span></div>
+  <div id="services" class="group" role="group" aria-label="Сервисы"><span class="cap">Сервисы:</span></div>
   <span class="meta">
     <span id="updated">—</span>
     <button id="home">Общий вид</button>
@@ -195,6 +196,11 @@ const params = new URLSearchParams(location.search);
 if (['2d', '3d'].includes(params.get('mode'))) mode = params.get('mode');
 if (params.get('layers')) shown = new Set(params.get('layers').split(',').filter((k) => FLOORS.some((f) => f.key === k)));
 if (!shown.size) shown = new Set(FLOORS.map((f) => f.key));
+
+// скрытые сервисы хранятся по проектам: { проект: [id, …] }; новый сервис по умолчанию виден
+const hiddenServices = loadPref('hiddenServices', {});
+let servicesParam = params.get('services') ? params.get('services').split(',') : null;   // /?services=showcase — показать только эти
+const hiddenSvc = () => new Set(hiddenServices[current] || []);
 
 /* ---------- сцена ---------- */
 
@@ -314,17 +320,20 @@ function build(project) {
   view = { nodes: new Map(), edges: [], platforms: [], clusters: [], particles: [], hidden: 0 };
 
   const floors = FLOORS.filter((f) => shown.has(f.key));
-  const visible = project.nodes.filter((n) => shown.has(floorOf(n)));
+  const offSvc = hiddenSvc();
+  const visible = project.nodes.filter((n) => shown.has(floorOf(n)) && !offSvc.has(n.service));
   view.hidden = project.nodes.length - visible.length;
 
   // платформы: сервис × этаж; сервис без единого файла — пустая платформа на этаже своего типа
   const hasNodes = new Set(project.nodes.map((n) => n.service));
   const plats = floors.map((f) => {
     const list = project.services
+      .filter((s) => !offSvc.has(s.id))
       .map((s) => ({ s, nodes: visible.filter((n) => n.service === s.id && floorOf(n) === f.key) }))
       .filter((p) => p.nodes.length || (!hasNodes.has(p.s.id) && floorOf({ layer: p.s.layer }) === f.key));
     for (const p of list) p.L = layoutPlatform(p.nodes);
-    return { f, list, width: list.reduce((sum, p) => sum + p.L.width + 6, -6), depth: Math.max(18, ...list.map((p) => p.L.depth + 10)) };
+    const offOnly = !list.length && project.nodes.some((n) => floorOf(n) === f.key);
+    return { f, list, offOnly, width: list.reduce((sum, p) => sum + p.L.width + 6, -6), depth: Math.max(18, ...list.map((p) => p.L.depth + 10)) };
   });
   const span = Math.max(30, ...plats.map((p) => p.width + 16));
 
@@ -372,7 +381,7 @@ function buildFloor(g, fp, span) {
   border.rotation.x = -Math.PI / 2;
   border.position.y = -0.3;
   g.add(border);
-  const fl = label('floor' + (fp.list.length ? '' : ' empty'), `<span style="color:${hex(f.color)}">${f.title}</span><small>${fp.list.length ? f.sub : 'в этом проекте нет'}</small>`);
+  const fl = label('floor' + (fp.list.length ? '' : ' empty'), `<span style="color:${hex(f.color)}">${f.title}</span><small>${fp.list.length ? f.sub : fp.offOnly ? 'сервисы этого слоя скрыты' : 'в этом проекте нет'}</small>`);
   fl.position.set(-span / 2 - 1, 0, mode === '3d' ? 0 : -fp.depth / 2 + 3);
   fl.center.set(1, mode === '3d' ? 0.5 : 0);
   g.add(fl);
@@ -507,7 +516,10 @@ function buildEdges(project, visible) {
         if (seen.has(id)) continue;
         seen.add(id);
         if (vis.has(id)) {
-          const floors = [...new Set(via.slice(0, -1).map((h) => FLOORS.find((f) => f.key === floorOf(byId.get(h))).short))];
+          // скрытый блок назван по причине: выключен его сервис или его слой
+          const offSvc = hiddenSvc();
+          const why = (h) => { const n = byId.get(h); return offSvc.has(n.service) ? `сервис ${n.service}` : FLOORS.find((f) => f.key === floorOf(n)).short; };
+          const floors = [...new Set(via.slice(0, -1).map(why))];
           add({ from: src, to: id, kind: 'via', label: 'через: ' + floors.join(', '), path: via.slice(0, -1).map((h) => byId.get(h).label) });
           continue;
         }
@@ -729,8 +741,14 @@ function renderControls() {
   $('tabs').innerHTML = data.projects.map((p) => `<button class="chip" data-p="${esc(p.name)}" aria-pressed="${p.name === current}">${esc(p.name)}</button>`).join('');
   document.querySelectorAll('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === mode));
   const p = data.projects.find((x) => x.name === current);
+  const off = hiddenSvc();
   const counts = Object.fromEntries(FLOORS.map((f) => [f.key, 0]));
-  for (const n of p?.nodes || []) counts[floorOf(n)]++;
+  for (const n of p?.nodes || []) if (!off.has(n.service)) counts[floorOf(n)]++;
+  const perSvc = {};
+  for (const n of p?.nodes || []) perSvc[n.service] = (perSvc[n.service] || 0) + 1;
+  $('services').innerHTML = '<span class="cap">Сервисы:</span>' + (p?.services || []).map((s) =>
+    `<button class="layer" data-svc="${esc(s.id)}" aria-pressed="${!off.has(s.id)}" style="--c:#9aa3b2" title="${esc(s.stack || s.type)}">` +
+    `<span class="box"></span>${esc(s.id)} <span class="n">${perSvc[s.id] || 0}</span></button>`).join('');
   $('layers').innerHTML = '<span class="cap">Слои:</span>' + FLOORS.map((f) =>
     `<button class="layer" data-layer="${f.key}" aria-pressed="${shown.has(f.key)}" style="--c:${hex(f.color)}" title="${f.sub}">` +
     `<span class="box"></span>${f.short} <span class="n">${counts[f.key]}</span></button>`).join('');
@@ -758,6 +776,18 @@ document.querySelector('.seg').addEventListener('click', (ev) => {
   mode = b.dataset.mode;
   savePref('mode', mode);
   applyControls();
+  rebuild(true);
+});
+$('services').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-svc]');
+  if (!b) return;
+  const p = data.projects.find((x) => x.name === current);
+  const off = hiddenSvc();
+  const id = b.dataset.svc;
+  // последний видимый сервис не скрываем, иначе схема опустеет
+  if (off.has(id)) off.delete(id); else if (p.services.length - off.size > 1) off.add(id);
+  hiddenServices[current] = [...off];
+  savePref('hiddenServices', hiddenServices);
   rebuild(true);
 });
 $('layers').addEventListener('click', (ev) => {
@@ -803,6 +833,11 @@ async function pollArchitecture() {
   const fromHash = decodeURIComponent(location.hash.slice(1));
   const names = data.projects.map((p) => p.name);
   if (!names.includes(current)) current = [fromHash, loadPref('project', null)].find((n) => names.includes(n)) || names[0];
+  if (servicesParam && current) {
+    const p = data.projects.find((x) => x.name === current);
+    hiddenServices[current] = p.services.map((s) => s.id).filter((id) => !servicesParam.includes(id));
+    servicesParam = null;
+  }
   if (current) show();
   $('updated').textContent = 'обновлено ' + new Date(data.builtAt).toLocaleTimeString();
 }
