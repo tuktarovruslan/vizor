@@ -67,6 +67,10 @@
   #info li button { background: none; border: 0; padding: 2px 0; text-align: left; display: flex; gap: 8px; align-items: center; }
   #info li button:hover { color: var(--recent); }
   #info .rel { color: var(--muted); font-size: 11px; }
+  #info ul.api li { display: flex; gap: 10px; align-items: flex-start; padding: 4px 0; font-size: 13px; }
+  #info ul.api a { color: #9cc0ff; font-weight: 600; }
+  .method { font: 700 11px/1 ui-monospace, Consolas, monospace; padding: 4px 6px; border-radius: 5px; color: #0d1016; background: #9aa3b2; flex: none; margin-top: 1px; }
+  .m-get { background: #61affe; } .m-post { background: #49cc90; } .m-put { background: #fca130; } .m-patch { background: #50e3c2; } .m-delete { background: #f93e3e; }
 
   /* подписи в сцене */
   .lbl { font-size: 11px; color: #cfd6e2; white-space: nowrap; text-shadow: 0 1px 3px #000, 0 0 2px #000; padding-top: 4px; transition: opacity .2s; }
@@ -392,11 +396,13 @@ function buildFloor(g, fp, span) {
   fl.position.set(-span / 2 - 1, 0, mode === '3d' ? 0 : -fp.depth / 2 + 3);
   fl.center.set(1, mode === '3d' ? 0.5 : 0);
   g.add(fl);
-  // под «ФРОНТЕНД» — ссылки на фронтенды выбранных сервисов
-  const sites = f.key === 'frontend' ? fp.list.filter((p) => /^https?:\/\//.test(p.s.url || '')) : [];
-  if (sites.length) {
-    fl.element.insertAdjacentHTML('beforeend', '<div class="sites">' + sites.map(({ s }) =>
-      `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" title="Открыть ${esc(s.url)}">${esc(s.id)} <small>${esc(s.url.replace(/^https?:\/\//, ''))} ↗</small></a>`).join('') + '</div>');
+  // под «ФРОНТЕНД» — ссылки на фронтенды выбранных сервисов, под «БЭКЕНД / API» — на их Swagger
+  const links = f.key === 'frontend'
+    ? fp.list.filter((p) => /^https?:\/\//.test(p.s.url || '')).map(({ s }) => ({ id: s.id, url: s.url, note: s.url.replace(/^https?:\/\//, '') }))
+    : f.key === 'api' ? fp.list.filter((p) => p.s.swagger).map(({ s }) => ({ id: s.id, url: s.swagger, note: 'Swagger' })) : [];
+  if (links.length) {
+    fl.element.insertAdjacentHTML('beforeend', '<div class="sites">' + links.map((l) =>
+      `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer" title="Открыть ${esc(l.url)}">${esc(l.id)} <small>${esc(l.note)} ↗</small></a>`).join('') + '</div>');
   }
 }
 
@@ -664,6 +670,10 @@ function select(id) {
       ${n.files.length > 1 ? `<dt>Файлов</dt><dd>${n.files.length}: ${n.files.map((f) => esc(f.split('/').pop())).join(', ')}</dd>` : ''}
       ${n.mtime ? `<dt>Изменён</dt><dd>${ago(n.mtime)}</dd>` : ''}
     </dl>
+    ${n.api?.length ? `<h4>Описание в Swagger</h4><ul class="api">${n.api.map((a) => `<li>
+      <span class="method m-${a.method.toLowerCase()}">${a.method}</span>
+      <span>${esc(a.summary || a.operationId || '')}${a.docs ? `<br><a href="${esc(a.docs)}" target="_blank" rel="noopener noreferrer">Открыть в Swagger ↗</a>` : ''}</span></li>`).join('')}</ul>`
+      : n.kind === 'route' ? '<h4>Описание в Swagger</h4><p class="rel">Этого адреса нет в openapi.json сервиса</p>' : ''}
     ${Object.entries(groups).map(([t, items]) => `<h4>${t} · ${items.length}</h4><ul>${items.join('')}</ul>`).join('') || '<h4>Связей с видимыми слоями нет</h4>'}`;
   box.classList.add('open');
 }

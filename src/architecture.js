@@ -108,6 +108,36 @@ function importSpecs(text, ext) {
   return specs;
 }
 
+// Swagger UI с deepLinking открывает адрес по ссылке #/<тег>/<operationId>; пробелы в имени заменяются на «_»
+const deepLink = (s) => encodeURIComponent(String(s).trim().replace(/\s/g, '_'));
+
+// Описание адресов из openapi.json сервиса: метод, краткое описание и ссылка на адрес в Swagger
+async function attachOpenApi(root, services, routes) {
+  for (const svc of services) {
+    if (!svc.openapi) continue;
+    let spec;
+    try {
+      spec = JSON.parse(await readFile(path.join(root, svc.dir, svc.openapi.spec), 'utf8'));
+    } catch {
+      continue; // нет файла или битый JSON — схема строится без описаний
+    }
+    const ui = svc.openapi.ui && svc.url ? svc.url.replace(/\/$/, '') + svc.openapi.ui : null;
+    for (const [specPath, ops] of Object.entries(spec.paths || {})) {
+      const asRoute = specPath.replace(/\{([^}]+)\}/g, ':$1');
+      const r = routes.find((x) => x.service === svc.id && (x.path === specPath || routeMatches(asRoute, x.path) || routeMatches(x.path, specPath)));
+      if (!r) continue;
+      r.node.api = Object.entries(ops)
+        .filter(([method]) => ['get', 'post', 'put', 'patch', 'delete'].includes(method))
+        .map(([method, op]) => ({
+          method: method.toUpperCase(),
+          summary: op.summary || null,
+          operationId: op.operationId || null,
+          docs: ui && op.operationId ? `${ui}#/${deepLink(op.tags?.[0] || 'default')}/${deepLink(op.operationId)}` : ui,
+        }));
+    }
+  }
+}
+
 export async function buildArchitecture(project) {
   const root = project.dir;
   const allFiles = await walk(root);
@@ -121,6 +151,8 @@ export async function buildArchitecture(project) {
     dir: normalize(s.dir || '.').replace(/^\.$/, ''),
     units: (s.architecture?.units || []).map(globToRegex),
     // architecture.layers: слой по подпапке сервиса, например { "web": "frontend", "api": "backend" } у монолита
+    // openapi: { "spec": путь к openapi.json внутри dir, "ui": путь Swagger UI у url сервиса }
+    openapi: s.openapi?.spec ? s.openapi : null,
     layers: Object.entries(s.architecture?.layers || {})
       .map(([dir, type]) => [normalize(dir).replace(/\/$/, ''), layerOf(type)])
       .sort((a, b) => b[0].length - a[0].length),
@@ -250,7 +282,7 @@ export async function buildArchitecture(project) {
     if (!n || n.layer !== 'backend') continue;
     for (const re of ROUTE_RES) {
       for (const m of text.matchAll(re)) {
-        const p = m[1];
+        const p = m[1].length > 1 ? m[1].replace(/\/$/, '') : m[1]; // '/docs/' и '/docs' — один адрес
         if (p === '/' || routes.some((r) => r.path === p && r.service === n.service)) continue;
         const id = `${n.service}:route:${p}`;
         const svc = services.find((s) => s.id === n.service);
@@ -261,6 +293,7 @@ export async function buildArchitecture(project) {
       }
     }
   }
+  await attachOpenApi(root, services, routes);
   for (const [f, { text }] of texts) {
     const n = nodes.get(unitOf(f)?.id);
     if (!n || n.layer !== 'frontend') continue;
@@ -301,7 +334,11 @@ export async function buildArchitecture(project) {
 
   return {
     name: project.name,
-    services: services.map(({ units, layers, dir, ...s }) => ({ ...s, dir: dir || '.' })),
+    services: services.map(({ units, layers, openapi, dir, ...s }) => ({
+      ...s,
+      dir: dir || '.',
+      swagger: openapi?.ui && s.url ? s.url.replace(/\/$/, '') + openapi.ui : null,
+    })),
     links: project.links.map((l) => ({ from: l.from, to: l.to, label: l.label || null })),
     nodes: [...nodes.values()],
     edges: edgeList,
