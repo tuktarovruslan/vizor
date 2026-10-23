@@ -216,6 +216,7 @@ for (const [key, e] of Object.entries(EDGES)) {
   $('edgekinds').insertAdjacentHTML('beforeend', `<li><span class="ln${key === 'via' ? ' dash' : ''}" style="background:${hex(e.color)}"></span>${e.name}</li>`);
 }
 $('edgekinds').insertAdjacentHTML('beforeend', `<li><span class="sw" style="background:var(--recent);border-radius:50%"></span>изменён за 15 мин</li>`);
+$('edgekinds').insertAdjacentHTML('beforeend', `<li><span class="sw" style="background:var(--bad);border-radius:50%"></span>логика без документации</li>`);
 
 /* ---------- настройки вида (запоминаются в браузере) ---------- */
 
@@ -763,6 +764,25 @@ renderer.domElement.addEventListener('pointerup', (ev) => {
 });
 addEventListener('keydown', (ev) => { if (ev.key === 'Escape') select(null); });
 
+/* ---------- бизнес-логика без документации ---------- */
+
+// Элемент этажа «Бизнес-логика» без одноимённого .md пульсирует красным: кольцо шире «недавнего», чтобы были видны оба
+function updateDocAlerts() {
+  if (!view) return;
+  for (const v of view.nodes.values()) {
+    v.noDoc = v.floor === 'logic' && !v.n.doc;
+    if (v.noDoc && !v.docRing) {
+      v.docRing = new THREE.Mesh(new THREE.RingGeometry(1.75, 2.0, 40), new THREE.MeshBasicMaterial({ color: 0xf0605d, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+      v.docRing.rotation.x = -Math.PI / 2;
+      v.docRing.position.copy(v.localBase).setY(0.05);
+      v.group.add(v.docRing);
+    } else if (!v.noDoc && v.docRing) {
+      v.group.remove(v.docRing); v.docRing.geometry.dispose(); v.docRing.material.dispose(); v.docRing = null;
+      v.mesh.material.emissive.setHex(v.recent ? 0x5a4a00 : 0x000000);
+    }
+  }
+}
+
 /* ---------- недавние изменения ---------- */
 
 function updateRecent() {
@@ -780,7 +800,8 @@ function updateRecent() {
     } else if (!recent && v.ring) {
       v.group.remove(v.ring); v.ring.geometry.dispose(); v.ring.material.dispose(); v.ring = null;
     }
-    v.mesh.material.emissive.setHex(recent ? 0x5a4a00 : 0x000000);
+    v.recent = recent;
+    if (!v.noDoc) v.mesh.material.emissive.setHex(recent ? 0x5a4a00 : 0x000000);
   }
   $('recentCount').textContent = list.length;
   $('recentCount').classList.toggle('has', list.length > 0);
@@ -895,6 +916,7 @@ function show() {
   } else {
     for (const n of p.nodes) { const v = view.nodes.get(n.id); if (v) v.n = n; }
   }
+  updateDocAlerts();
   updateRecent();
   applyStatus();
   applyHighlight();
@@ -941,10 +963,17 @@ renderer.setAnimationLoop(() => {
       p.dot.position.copy(p.curve.getPoint(p.t));
     }
     const pulse = (Math.sin(performance.now() / 300) + 1) / 2;
+    const alarm = (Math.sin(performance.now() / 420) + 1) / 2;   // свой ритм, чтобы не сливался с «недавно изменён»
     // подпись видна, когда ячейка блока на экране шире ~55 px
     const pxPerUnitAt1 = innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
     for (const v of view.nodes.values()) {
       if (v.ring) { v.ring.scale.setScalar(1 + pulse * 0.35); v.ring.material.opacity = 0.9 - pulse * 0.6; }
+      if (v.docRing) {
+        v.docRing.scale.setScalar(1 + alarm * 0.3);
+        v.docRing.material.opacity = 0.95 - alarm * 0.65;
+        // недавно изменённый остаётся жёлтым, остальные мягко краснеют в такт кольцу
+        if (!v.recent) v.mesh.material.emissive.setRGB(0.42 * (1 - alarm), 0, 0);
+      }
       // дальние подписи прячем, чтобы не было каши из текста
       const far = (CELL * pxPerUnitAt1) / camera.position.distanceTo(v.base) < 55;
       v.label.visible = !far || v.n.id === hovered || v.n.id === selected || !!v.ring;
