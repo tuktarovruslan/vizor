@@ -11,6 +11,7 @@ const TIMEOUT = 3000;
 
 const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
 const threeDir = fileURLToPath(new URL('../node_modules/three/', import.meta.url));
+const markedDir = fileURLToPath(new URL('../node_modules/marked/lib/', import.meta.url));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
 // Отдаёт файл из папки root, не выпуская путь за её пределы
@@ -101,7 +102,27 @@ async function getStatus() {
   };
 }
 
-const PAGES = { '/': 'index.html', '/status': 'status.html' };
+const PAGES = { '/': 'index.html', '/status': 'status.html', '/doc': 'doc.html' };
+
+// Документация элемента: .md внутри папки проекта; путь за пределы проекта и не-.md не отдаются
+async function sendDoc(res, url) {
+  const project = (await loadProjects()).find((p) => p.name === url.searchParams.get('project'));
+  const rel = url.searchParams.get('path') || '';
+  const root = project ? path.resolve(project.dir) + path.sep : null;
+  const file = root ? path.resolve(root, rel) : null;
+  if (!file || !file.startsWith(root) || path.extname(file).toLowerCase() !== '.md') {
+    res.writeHead(404, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Документ не найден' }));
+  }
+  try {
+    const body = await readFile(file);
+    res.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(body);
+  } catch {
+    res.writeHead(404, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Документ не найден' }));
+  }
+}
 
 const server = http.createServer((req, res) => {
   // ошибка одного запроса не должна ронять весь vizor
@@ -125,7 +146,9 @@ async function handle(req, res) {
     res.end(JSON.stringify({ builtAt: new Date().toISOString(), projects: await Promise.all(projects.map(buildArchitecture)) }));
     return;
   }
+  if (pathname === '/api/doc') return sendDoc(res, new URL(req.url, 'http://localhost'));
   if (PAGES[pathname] && (await sendFile(res, publicDir, PAGES[pathname]))) return;
+  if (pathname.startsWith('/vendor/marked/') && (await sendFile(res, markedDir, decodeURIComponent(pathname.slice(15))))) return;
   if (pathname.startsWith('/vendor/three/') && (await sendFile(res, threeDir, decodeURIComponent(pathname.slice(14))))) return;
   res.writeHead(404, { 'content-type': 'application/json' });
   res.end(JSON.stringify({ error: 'Not found' }));

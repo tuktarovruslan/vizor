@@ -81,7 +81,9 @@
   #info li button:hover { color: var(--recent); }
   #info .rel { color: var(--muted); font-size: 11px; }
   #info ul.api li { display: flex; gap: 10px; align-items: flex-start; padding: 4px 0; font-size: 13px; }
-  #info ul.api a { color: #9cc0ff; font-weight: 600; }
+  #info ul.api a, #info .doc a { color: #9cc0ff; font-weight: 600; }
+  #info .doc { margin: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+  #info p.rel { margin: 0; }
   .method { font: 700 11px/1 ui-monospace, Consolas, monospace; padding: 4px 6px; border-radius: 5px; color: #0d1016; background: #9aa3b2; flex: none; margin-top: 1px; }
   .m-get { background: #61affe; } .m-post { background: #49cc90; } .m-put { background: #fca130; } .m-patch { background: #50e3c2; } .m-delete { background: #f93e3e; }
 
@@ -232,6 +234,7 @@ if (!shown.size) shown = new Set(FLOORS.map((f) => f.key));
 const hiddenServices = loadPref('hiddenServices', {});
 let servicesParam = params.get('services') ? params.get('services').split(',') : null;   // /?services=showcase — показать только эти
 const hiddenSvc = () => new Set(hiddenServices[current] || []);
+let nodeParam = params.get('node');
 
 /* ---------- сцена ---------- */
 
@@ -708,6 +711,9 @@ function select(id) {
       ${n.files.length > 1 ? `<dt>Файлов</dt><dd>${n.files.length}: ${n.files.map((f) => esc(f.split('/').pop())).join(', ')}</dd>` : ''}
       ${n.mtime ? `<dt>Изменён</dt><dd>${ago(n.mtime)}</dd>` : ''}
     </dl>
+    ${n.doc ? `<h4>Документация</h4><p class="doc"><a href="/doc?project=${encodeURIComponent(current)}&path=${encodeURIComponent(n.doc)}" target="_blank" rel="noopener">${esc(n.doc.split('/').pop())} ↗</a>
+      <span class="rel">Markdown, можно перенести на вики</span></p>`
+      : v.floor === 'logic' ? `<h4>Документация</h4><p class="rel">Документации нет: нужен файл ${esc(n.path.replace(/\.[^./]+$/, '.md').split('/').pop())} рядом с ${esc(n.path.split('/').pop())}</p>` : ''}
     ${n.api?.length ? `<h4>Описание в Swagger</h4><ul class="api">${n.api.map((a) => `<li>
       <span class="method m-${a.method.toLowerCase()}">${a.method}</span>
       <span>${esc(a.summary || a.operationId || '')}${a.docs ? `<br><a href="${esc(a.docs)}" target="_blank" rel="noopener noreferrer">Открыть в Swagger ↗</a>` : ''}</span></li>`).join('')}</ul>`
@@ -884,6 +890,8 @@ function show() {
     build(p);
     if (keep && view.nodes.has(keep)) select(keep); else select(null);
     if (first) fitCamera();
+    // /?node=<id>#проект — сразу открыть элемент (ссылка на элемент схемы, например с вики)
+    if (nodeParam && view.nodes.has(nodeParam)) { focusNode(nodeParam); nodeParam = null; }
   } else {
     for (const n of p.nodes) { const v = view.nodes.get(n.id); if (v) v.n = n; }
   }

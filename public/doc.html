@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vizor · документация</title>
+<style>
+  :root { --bg: #0d1016; --panel: #161b24; --text: #e6e9ef; --muted: #8b95a7; --border: #2b3240; --accent: #4f8cff; --ok: #3ecf7d; --bad: #f0605d; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { position: sticky; top: 0; z-index: 2; background: rgba(13, 16, 22, .94); backdrop-filter: blur(6px); border-bottom: 1px solid var(--border); }
+  .bar { max-width: 860px; margin: 0 auto; padding: 10px 16px; display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; }
+  .bar a.back { color: var(--muted); text-decoration: none; font-size: 14px; }
+  .bar a.back:hover { color: var(--text); }
+  .bar .path { color: var(--muted); font: 13px ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+  .bar .actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { font: inherit; font-size: 13px; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 5px 12px; cursor: pointer; text-decoration: none; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.done { border-color: var(--ok); color: var(--ok); }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 80px; }
+  #msg { color: var(--muted); }
+  #msg.bad { color: var(--bad); }
+
+  /* оформление документа */
+  .md h1 { font-size: 30px; line-height: 1.25; margin: 8px 0 16px; }
+  .md h2 { font-size: 21px; margin: 36px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .md h3 { font-size: 17px; margin: 24px 0 8px; }
+  .md p, .md ul, .md ol { margin: 0 0 14px; }
+  .md li { margin: 3px 0; }
+  .md a { color: #9cc0ff; }
+  .md code { font: 14px ui-monospace, Consolas, monospace; background: var(--panel); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; }
+  .md pre { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; overflow-x: auto; }
+  .md pre code { background: none; border: 0; padding: 0; }
+  .md table { border-collapse: collapse; width: 100%; margin: 0 0 16px; font-size: 15px; display: block; overflow-x: auto; }
+  .md th, .md td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+  .md th { background: var(--panel); }
+  .md blockquote { margin: 0 0 14px; padding: 4px 14px; border-left: 3px solid var(--accent); color: var(--muted); }
+  .md hr { border: 0; border-top: 1px solid var(--border); margin: 28px 0; }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <a class="back" id="back" href="/">← к схеме</a>
+    <span class="path" id="path"></span>
+    <span class="actions">
+      <button class="btn" id="copy" disabled>Скопировать Markdown</button>
+      <a class="btn" id="raw" target="_blank" rel="noopener">Открыть как .md</a>
+      <a class="btn" id="download">Скачать .md</a>
+    </span>
+  </div>
+</header>
+<main>
+  <p id="msg">загрузка…</p>
+  <article class="md" id="doc"></article>
+</main>
+<script type="module">
+import { marked } from '/vendor/marked/marked.esm.js';
+
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const project = params.get('project') || '';
+const path = params.get('path') || '';
+const raw = `/api/doc?project=${encodeURIComponent(project)}&path=${encodeURIComponent(path)}`;
+
+$('path').textContent = `${project} / ${path}`;
+$('back').href = '/#' + encodeURIComponent(project);
+$('raw').href = raw;
+$('download').href = raw;
+$('download').download = path.split('/').pop() || 'doc.md';
+
+let source = '';
+try {
+  const res = await fetch(raw, { cache: 'no-store' });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+  source = await res.text();
+  // документы — свои файлы из репозитория, поэтому отображаются как есть
+  $('doc').innerHTML = marked.parse(source);
+  $('msg').remove();
+  const h1 = $('doc').querySelector('h1');
+  if (h1) document.title = `${h1.textContent} · Vizor`;
+  $('copy').disabled = false;
+} catch (err) {
+  $('msg').textContent = `Не удалось открыть документ: ${err.message}`;
+  $('msg').className = 'bad';
+}
+
+// Markdown целиком в буфер обмена — для вставки на вики
+$('copy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(source);
+    $('copy').textContent = 'Скопировано';
+    $('copy').classList.add('done');
+    setTimeout(() => { $('copy').textContent = 'Скопировать Markdown'; $('copy').classList.remove('done'); }, 1800);
+  } catch {
+    $('copy').textContent = 'Не удалось скопировать';
+  }
+});
+</script>
+</body>
+</html>

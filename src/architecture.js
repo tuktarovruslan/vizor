@@ -275,6 +275,13 @@ export async function buildArchitecture(project) {
     }),
   );
 
+  // Документация элемента — одноимённый .md рядом с файлом: logic/analyze.js → logic/analyze.md
+  for (const n of nodes.values()) {
+    if (n.files.length !== 1) continue;
+    const md = n.files[0].replace(/\.[^./]+$/, '.md');
+    if (md !== n.files[0] && fileSet.has(md)) n.doc = md;
+  }
+
   // 2. Маршруты API бэкенда и вызовы их с фронтенда
   const routes = [];
   for (const [f, { text }] of texts) {

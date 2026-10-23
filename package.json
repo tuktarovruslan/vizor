@@ -8,6 +8,7 @@
     "start": "node src/server.js"
   },
   "dependencies": {
+    "marked": "^18.1.1",
     "three": "^0.186.1"
   }
 }
