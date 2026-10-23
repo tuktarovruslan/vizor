@@ -111,10 +111,18 @@
   .floor.empty { opacity: .45; }
 
   #msg { position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
+  /* значок «как читать схему» — только на узких экранах, вместо постоянной легенды */
+  #legendBtn { display: none; left: 12px; bottom: 12px; width: 42px; height: 42px; padding: 0; border-radius: 12px;
+               align-items: center; justify-content: center; color: var(--muted); }
+  #legendBtn:hover, #legendBtn[aria-expanded="true"] { color: var(--text); border-color: var(--accent); }
   @media (max-width: 760px) {
-    #legend { display: none; }
+    #legendBtn { display: inline-flex; }
+    #legend { display: none; right: 12px; bottom: 62px; max-width: none; max-height: 60vh; overflow: auto; }
+    #legend.open { display: block; }
+    #legend summary { pointer-events: none; list-style: none; }
+    #legend summary::-webkit-details-marker { display: none; }
     #info { left: 12px; width: auto; }
-    #recent { left: 12px; width: auto; }
+    #recent { left: 62px; width: auto; }
     #recent ul { max-height: calc(25vh - 40px); }
   }
 </style>
@@ -145,6 +153,10 @@
   </span>
 </header>
 
+<button id="legendBtn" class="panel" aria-expanded="false" aria-controls="legend" title="Как читать схему" aria-label="Как читать схему">
+  <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <path d="M7.6 7.7a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.2.9-1.2 1.7v.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="10" cy="14.6" r="1" fill="currentColor"/></svg>
+</button>
 <aside id="legend" class="panel">
   <details open>
     <summary>Как читать схему</summary>
@@ -855,7 +867,23 @@ renderer.domElement.addEventListener('pointerup', (ev) => {
   if (!downAt || Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]) > 5) return;
   select(pick(ev));
 });
-addEventListener('keydown', (ev) => { if (ev.key === 'Escape') select(null); });
+addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { setLegendOpen(false); select(null); } });
+
+// на узком экране легенда открывается значком и закрывается им же, кликом мимо или Esc
+function setLegendOpen(on) {
+  $('legend').classList.toggle('open', on);
+  $('legendBtn').setAttribute('aria-expanded', String(on));
+  if (!on) { $('legend').style.bottom = $('legend').style.maxHeight = ''; return; }
+  $('legend').querySelector('details').open = true;
+  // над значком и плашкой «Недавно изменено» (её высота меняется), но не выше верхней панели
+  const floor = Math.min($('recent').getBoundingClientRect().top, $('legendBtn').getBoundingClientRect().top);
+  $('legend').style.bottom = innerHeight - floor + 8 + 'px';
+  $('legend').style.maxHeight = Math.max(160, floor - $('top').getBoundingClientRect().bottom - 16) + 'px';
+}
+// стал широкий экран — значка нет, легенда снова постоянная на своём месте
+addEventListener('resize', () => { if ($('legend').classList.contains('open')) setLegendOpen(getComputedStyle($('legendBtn')).display !== 'none'); });
+$('legendBtn').addEventListener('click', () => setLegendOpen(!$('legend').classList.contains('open')));
+addEventListener('pointerdown', (ev) => { if (!ev.target.closest('#legend, #legendBtn')) setLegendOpen(false); });
 
 /* ---------- бизнес-логика без документации ---------- */
 
