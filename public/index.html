@@ -48,14 +48,27 @@
   #legend .hint { color: var(--muted); margin: 6px 0 0; }
   #legend summary { cursor: pointer; color: var(--muted); }
 
-  #recent { right: 12px; bottom: 12px; padding: 10px 14px; font-size: 12px; width: 260px; max-height: 40vh; overflow: auto; }
-  #recent ul { list-style: none; margin: 0; padding: 0; }
+  #recent { right: 12px; bottom: 12px; padding: 0; font-size: 12px; width: 260px; overflow: hidden; }
+  /* шапка-кнопка сворачивает список: тело схлопывается по высоте, окно остаётся прижатым к низу */
+  #recent .head { width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: none; border: 0; text-align: left; }
+  #recent .head .ttl { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  #recent .head .count { margin-left: auto; color: var(--muted); font-size: 11px; font-weight: 600; min-width: 18px; text-align: center;
+                         padding: 1px 6px; border-radius: 8px; border: 1px solid var(--border); }
+  #recent .head .count.has { color: var(--recent); border-color: var(--recent); }
+  #recent .head svg { flex: none; color: var(--muted); transition: transform .3s ease; }
+  #recent .head:hover svg { color: var(--text); }
+  #recent.collapsed .head svg { transform: rotate(180deg); }
+  #recent .body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .3s ease; }
+  #recent.collapsed .body { grid-template-rows: 0fr; }
+  #recent .body > div { min-height: 0; overflow: hidden; }
+  #recent ul { list-style: none; margin: 0; padding: 0 14px 10px; max-height: calc(40vh - 40px); overflow: auto; }
   #recent li button { width: 100%; text-align: left; background: none; border: 0; padding: 3px 0; display: flex; gap: 8px; }
   #recent li button:hover .name { color: var(--recent); }
   #recent .ago { color: var(--muted); margin-left: auto; white-space: nowrap; }
   #recent .empty { color: var(--muted); }
 
-  #info { top: 110px; right: 12px; width: 320px; max-height: calc(100vh - 110px - 40vh - 36px); overflow: auto; padding: 14px 16px; display: none; }
+  #info { top: 110px; right: 12px; width: 320px; max-height: calc(100vh - 110px - 40vh - 36px); overflow: auto; padding: 14px 16px; display: none; transition: max-height .3s ease; }
+  #recent.collapsed ~ #info { max-height: calc(100vh - 110px - 70px); }
   #info.open { display: block; }
   #info h3 { margin: 0 32px 2px 0; font-size: 16px; overflow-wrap: anywhere; }
   #info .kind { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
@@ -97,7 +110,8 @@
   @media (max-width: 760px) {
     #legend { display: none; }
     #info { left: 12px; width: auto; }
-    #recent { left: 12px; width: auto; max-height: 25vh; }
+    #recent { left: 12px; width: auto; }
+    #recent ul { max-height: calc(25vh - 40px); }
   }
 </style>
 <script type="importmap">
@@ -136,8 +150,14 @@
 </aside>
 
 <aside id="recent" class="panel">
-  <h2>Недавно изменено</h2>
-  <ul id="recentList"><li class="empty">пока ничего</li></ul>
+  <button class="head" id="recentToggle" aria-expanded="true" aria-controls="recentBody" title="Свернуть или развернуть">
+    <span class="ttl">Недавно изменено</span>
+    <span class="count" id="recentCount">0</span>
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <div class="body" id="recentBody"><div>
+    <ul id="recentList"><li class="empty">пока ничего</li></ul>
+  </div></div>
 </aside>
 
 <aside id="info" class="panel" aria-live="polite"></aside>
@@ -701,6 +721,13 @@ $('info').addEventListener('click', (ev) => {
   if (go) focusNode(go.dataset.go);
   else if (ev.target.closest('.close')) select(null);
 });
+function setRecentCollapsed(on) {
+  $('recent').classList.toggle('collapsed', on);
+  $('recentToggle').setAttribute('aria-expanded', String(!on));
+  savePref('recentCollapsed', on);
+}
+setRecentCollapsed(loadPref('recentCollapsed', false));
+$('recentToggle').addEventListener('click', () => setRecentCollapsed(!$('recent').classList.contains('collapsed')));
 $('recentList').addEventListener('click', (ev) => {
   const go = ev.target.closest('[data-go]');
   if (go) focusNode(go.dataset.go);
@@ -749,6 +776,8 @@ function updateRecent() {
     }
     v.mesh.material.emissive.setHex(recent ? 0x5a4a00 : 0x000000);
   }
+  $('recentCount').textContent = list.length;
+  $('recentCount').classList.toggle('has', list.length > 0);
   $('recentList').innerHTML = list.length
     ? list.slice(0, 30).map((v) => `<li><button data-go="${esc(v.n.id)}"><span class="sw" style="background:${hex((KINDS[v.n.kind] || KINDS.module).color)}"></span><span class="name">${esc(v.n.label)}</span><span class="ago">${ago(v.n.mtime)}</span></button></li>`).join('')
     : '<li class="empty">за последние 15 минут ничего</li>';
