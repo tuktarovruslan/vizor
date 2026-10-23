@@ -398,7 +398,7 @@ function build(project) {
   let y2d = 0;
   plats.forEach((fp, i) => {
     if (mode === '3d') fp.y = -i * gap3d;
-    else { fp.y = y2d - fp.depth / 2; y2d -= fp.depth + 6; }
+    else { fp.y = y2d - fp.depth / 2; y2d -= fp.depth + FLOOR_GAP_2D; }
   });
 
   for (const fp of plats) {
@@ -419,6 +419,7 @@ function build(project) {
   for (const v of view.nodes.values()) placeNode(v);
   // рамки сразу по фактическим местам блоков (с учётом сохранённых перетаскиваний)
   for (const floor of view.floors) fitFrames(floor);
+  if (mode === '2d') restackFloors(view.floors[0]);
 
   buildEdges(project, visible);
 }
@@ -547,6 +548,36 @@ function fitFrames(floor) {
     o.scale.set(fr.x1 - fr.x0, fr.z1 - fr.z0, 1);
   }
   floor.label.position.set(fr.x0 - 1, 0, mode === '3d' ? (fr.z0 + fr.z1) / 2 : fr.z0 + 3);
+  floor.rect = fr;
+}
+
+// 2D: этажи — полосы сверху вниз с постоянным зазором. Этаж-якорь (тот, где тащат блок) стоит на месте,
+// остальные раздвигаются от его рамки вверх и вниз — и сходятся обратно, когда рамка сжимается.
+// Группа этажа повёрнута к зрителю: локальная z идёт вниз по экрану, поэтому верх полосы — y − z0, низ — y − z1.
+const FLOOR_GAP_2D = 6;
+function restackFloors(anchor) {
+  const floors = view.floors, at = floors.indexOf(anchor);
+  if (at < 0) return;
+  const moved = new Set();
+  const setY = (f, y) => { if (Math.abs(f.g.position.y - y) > 1e-6) { f.g.position.y = y; moved.add(f); } };
+  let top = anchor.g.position.y - anchor.rect.z0, bottom = anchor.g.position.y - anchor.rect.z1;
+  for (let i = at - 1; i >= 0; i--) {
+    const f = floors[i];
+    setY(f, top + FLOOR_GAP_2D + f.rect.z1);
+    top = f.g.position.y - f.rect.z0;
+  }
+  for (let i = at + 1; i < floors.length; i++) {
+    const f = floors[i];
+    setY(f, bottom - FLOOR_GAP_2D + f.rect.z0);
+    bottom = f.g.position.y - f.rect.z1;
+  }
+  if (!moved.size) return;
+  // сдвинутые этажи: мировые точки их блоков и платформ, и связи, которые к ним ведут
+  for (const f of moved) f.g.updateMatrixWorld(true);
+  const shifted = new Set();
+  for (const v of view.nodes.values()) if (moved.has(v.frame)) { placeNode(v); shifted.add(v); }
+  for (const pl of view.platforms) if ([...moved].some((f) => f.plats.includes(pl))) pl.center = pl.group.localToWorld(pl.localCenter.clone());
+  for (const rec of view.edges) if (shifted.has(rec.a) || shifted.has(rec.b) || rec.e.kind === 'service') refreshEdge(rec);
 }
 
 // мировые точки узла: основание (для камеры и колец) и точка крепления связей
@@ -881,6 +912,7 @@ function moveDragged(ev) {
   for (const ring of [v.ring, v.docRing]) if (ring) ring.position.set(local.x, ring.position.y, local.z);
   placeNode(v);
   fitFrames(v.frame);
+  if (mode === '2d') restackFloors(v.frame);
   for (const rec of view.edges) if (rec.a === v || rec.b === v || rec.e.kind === 'service') refreshEdge(rec);
 }
 
