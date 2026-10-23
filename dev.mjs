@@ -1,23 +1,21 @@
 ﻿// Поднимает vizor и все сервисы всех проектов из vizor.json: node dev.mjs
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { loadProjects, warehouseRoot } from './src/manifests.js';
+import { loadProjects } from './src/manifests.js';
 
 const COLORS = [36, 35, 32, 34, 31, 37];
 
 const projects = await loadProjects();
-const services = [
-  { label: 'vizor', cwd: path.join(warehouseRoot, 'vizor'), command: 'npm run dev' },
-  ...projects.flatMap((p) =>
-    p.services
-      .filter((s) => s.command)
-      .map((s) => ({
-        label: `${p.name}/${s.id}`,
-        cwd: path.join(p.dir, s.dir || '.'),
-        command: s.command,
-      })),
-  ),
-];
+// сам vizor описан в vizor/vizor.json и запускается как обычный сервис
+const services = projects.flatMap((p) =>
+  p.services
+    .filter((s) => s.command)
+    .map((s) => ({
+      label: `${p.name}/${s.id}`,
+      cwd: path.join(p.dir, s.dir || '.'),
+      command: s.command,
+    })),
+);
 
 const children = services.map(({ label, cwd, command }, i) => {
   const child = spawn(command, { cwd, shell: true });

@@ -1,0 +1,25 @@
+{
+  "name": "vizor",
+  "services": [
+    {
+      "id": "ui",
+      "type": "frontend",
+      "stack": "HTML + three.js",
+      "dir": "public",
+      "url": "http://localhost:4000",
+      "health": "/"
+    },
+    {
+      "id": "server",
+      "type": "backend",
+      "stack": "Node.js",
+      "dir": "src",
+      "command": "npm run dev",
+      "url": "http://localhost:4000",
+      "health": "/api/status"
+    }
+  ],
+  "links": [
+    { "from": "ui", "to": "server", "label": "/api", "via": "/api/status" }
+  ]
+}

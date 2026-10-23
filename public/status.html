@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vizor</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #fff; --text: #1c2330; --muted: #6b7587; --border: #dde1e8;
+    --ok: #1a9c56; --bad: #d63a3a; --idle: #9aa3b2; --grid: #e6e9ef;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #12151b; --card: #1b2029; --text: #e6e9ef; --muted: #8b95a7; --border: #2b3240;
+            --ok: #3ecf7d; --bad: #f0605d; --idle: #6b7587; --grid: #1c212b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; }
+  .meta { color: var(--muted); font-size: 13px; }
+  button { font: inherit; padding: 4px 12px; border: 1px solid var(--border); border-radius: 6px;
+           background: var(--card); color: var(--text); cursor: pointer; }
+  .project { margin: 28px 0; }
+  .project > h2 { font-size: 17px; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
+  .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: var(--border); color: var(--muted); }
+  .badge.up { background: transparent; color: var(--ok); border: 1px solid var(--ok); }
+  .badge.down { background: transparent; color: var(--bad); border: 1px solid var(--bad); }
+
+  /* «пространство», в котором висят плитки */
+  .canvas { position: relative; min-height: 340px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+            background-color: var(--card); background-image: radial-gradient(var(--grid) 1.2px, transparent 1.2px); background-size: 22px 22px; }
+  .canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  .edge { fill: none; stroke: var(--idle); stroke-width: 2.5; stroke-linecap: round; }
+  .edge.up { stroke: var(--ok); stroke-dasharray: 7 6; animation: flow 1s linear infinite; }
+  .edge.down { stroke: var(--bad); stroke-dasharray: 3 7; }
+  @keyframes flow { to { stroke-dashoffset: -13; } }
+  @media (prefers-reduced-motion: reduce) { .edge.up { animation: none; } }
+  .edge-label { position: absolute; z-index: 3; transform: translate(-50%, -50%); pointer-events: none; white-space: nowrap;
+                font-size: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 2px 9px; color: var(--muted); }
+  .edge-label.up { color: var(--ok); border-color: var(--ok); }
+  .edge-label.down { color: var(--bad); border-color: var(--bad); }
+
+  .node { position: absolute; z-index: 2; width: 230px; background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+          padding: 14px 16px; cursor: grab; touch-action: none; user-select: none; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .node.drag { cursor: grabbing; z-index: 5; box-shadow: 0 10px 24px rgba(0,0,0,.25); }
+  .node h3 { margin: 0 0 2px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .node .type { margin-left: auto; font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--idle); flex: none; }
+  .up .dot { background: var(--ok); } .down .dot { background: var(--bad); }
+  .state { font-weight: 600; font-size: 14px; } .up .state { color: var(--ok); } .down .state { color: var(--bad); }
+  dl { margin: 8px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 13px; }
+  dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
+  dd a { color: inherit; text-decoration: underline; text-decoration-color: var(--idle); text-underline-offset: 2px; }
+  dd a:hover { color: var(--ok); text-decoration-color: currentColor; }
+
+  .empty { color: var(--muted); }
+  details { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; font-size: 13px; }
+  summary { cursor: pointer; font-weight: 600; }
+  label.int { display: inline-flex; gap: 6px; align-items: center; margin-top: 8px; }
+  input { width: 90px; font: inherit; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
+  pre { background: var(--bg); padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 12px; }
+  ul.log { list-style: none; margin: 16px 0 0; padding: 0; font: 12px/1.6 ui-monospace, Consolas, monospace; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Vizor</h1>
+    <span class="meta"><a href="/" style="color:inherit">3D-архитектура</a> · плитки можно перетаскивать · обновлено: <span id="updated">—</span> ·
+      <button id="reset" title="Вернуть расположение по умолчанию">Сбросить расположение</button>
+      <button id="refresh">Обновить</button></span>
+  </header>
+
+  <div id="projects"><p class="empty">загрузка…</p></div>
+
+  <details>
+    <summary>Как подключить проект</summary>
+    <label class="int">Интервал, сек <input id="interval" type="number" value="5" min="1"></label>
+    <p>Vizor ищет в корне warehouse папки с файлом <code>vizor.json</code> и опрашивает описанные там сервисы.
+       Новый проект появится на странице без перезапуска. Те же манифесты использует <code>node dev.mjs</code>
+       для запуска сервисов. Расположение плиток запоминается в браузере.</p>
+<pre>{
+  "name": "my-project",
+  "services": [
+    { "id": "api", "type": "backend", "stack": "Node", "dir": "api",
+      "command": "npm run dev", "url": "http://localhost:3100", "health": "/health" }
+  ],
+  "links": [
+    { "from": "web", "to": "api", "label": "/api proxy", "via": "/api/health" }
+  ]
+}</pre>
+  </details>
+
+  <ul class="log" id="log"></ul>
+</main>
+
+<!-- общие стрелки для связей: цвета берутся из тем -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="arrow-up" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--ok)"/></marker>
+    <marker id="arrow-down" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--bad)"/></marker>
+  </defs>
+</svg>
+
+<script>
+const $ = id => document.getElementById(id);
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const LS_KEY = 'vizor.layout.v1';
+const CARD_W = 230, PAD = 24;
+
+const ctxs = new Map();   // имя проекта -> контекст отрисовки
+let timer, prev = {};
+let layout = loadLayout();
+
+function loadLayout() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; }
+}
+function saveLayout() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(layout)); } catch { /* localStorage недоступен */ }
+}
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function row(dl, name, value) {
+  const dd = el('dd', null, value);
+  dl.append(el('dt', null, name), dd);
+  return dd;
+}
+
+function urlRow(dl, url) {
+  const dd = row(dl, 'URL', '');
+  if (!/^https?:\/\//.test(url)) return dd.append(url);
+  const a = el('a', null, url);
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  dd.append(a);
+}
+
+function linkText(l, services) {
+  if (l.up) return `связь есть · ${l.ms} мс`;
+  const from = services.find(s => s.id === l.from), to = services.find(s => s.id === l.to);
+  if (from && !from.up) return `${l.from} недоступен`;
+  if (to && !to.up) return `${l.to} недоступен`;
+  return 'ошибка' + (l.http ? ' HTTP ' + l.http : '');
+}
+
+function note(name, up) {
+  if (prev[name] === up) return;
+  if (name in prev) {
+    $('log').prepend(el('li', null, `${new Date().toLocaleTimeString()}  ${name}: ${up ? 'поднялся' : 'недоступен'}`));
+  }
+  prev[name] = up;
+}
+
+/* ---------- построение проекта ---------- */
+
+function buildProject(name) {
+  const sec = el('section', 'project');
+  const title = el('h2', null, name);
+  const badge = el('span', 'badge');
+  title.append(badge);
+  const canvas = el('div', 'canvas');
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  canvas.append(svg);
+  sec.append(title, canvas);
+  return { name, sec, badge, canvas, svg, nodes: new Map(), edges: new Map(), pos: new Map(), links: [], frame: 0 };
+}
+
+function fillService(node, s) {
+  node.className = 'node ' + (s.up ? 'up' : 'down') + (node.classList.contains('drag') ? ' drag' : '');
+  const h = el('h3');
+  h.append(el('span', 'dot'), s.id, el('span', 'type', s.type));
+  const dl = el('dl');
+  urlRow(dl, s.url);
+  if (s.stack) row(dl, 'Стек', s.stack);
+  row(dl, 'Отклик', s.ms == null ? '—' : s.ms + ' мс');
+  if (s.uptime != null) row(dl, 'Аптайм', Math.round(s.uptime) + ' с');
+  node.replaceChildren(h, el('div', 'state', s.up ? 'работает' : 'не запущен'), dl);
+}
+
+function makeNode(ctx, id) {
+  const node = el('div', 'node');
+  let drag = null;
+  node.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('a')) return;
+    const p = ctx.pos.get(id);
+    drag = { px: e.clientX, py: e.clientY, x: p.x, y: p.y };
+    node.setPointerCapture(e.pointerId);
+    node.classList.add('drag');
+  });
+  node.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const maxX = Math.max(0, ctx.canvas.clientWidth - node.offsetWidth);
+    ctx.pos.set(id, {
+      x: Math.min(maxX, Math.max(0, drag.x + e.clientX - drag.px)),
+      y: Math.max(0, drag.y + e.clientY - drag.py),
+    });
+    scheduleDraw(ctx);
+  });
+  const end = () => {
+    if (!drag) return;
+    drag = null;
+    node.classList.remove('drag');
+    layout[`${ctx.name}/${id}`] = ctx.pos.get(id);
+    saveLayout();
+  };
+  node.addEventListener('pointerup', end);
+  node.addEventListener('pointercancel', end);
+  ctx.canvas.append(node);
+  ctx.nodes.set(id, node);
+  return node;
+}
+
+/* ---------- раскладка и отрисовка связей ---------- */
+
+// Столбцы по глубине связей: источник слева, потребители правее
+function autoLayout(ctx, p) {
+  const depth = Object.fromEntries(p.services.map(s => [s.id, 0]));
+  for (let i = 0; i < p.services.length; i++) {
+    for (const l of p.links) {
+      if (l.from in depth && l.to in depth) depth[l.to] = Math.max(depth[l.to], depth[l.from] + 1);
+    }
+  }
+  const cols = [];
+  p.services.forEach(s => (cols[depth[s.id]] ||= []).push(s.id));
+  const W = ctx.canvas.clientWidth;
+  const n = cols.length;
+  const stacked = n > 1 && W < n * CARD_W + (n - 1) * 60 + 2 * PAD;
+  const gapX = n > 1 ? Math.min(220, Math.max(60, (W - 2 * PAD - n * CARD_W) / (n - 1))) : 0;
+  const out = {};
+  let stackY = PAD;
+  cols.forEach((ids, c) => {
+    let y = PAD + (stacked ? 0 : c % 2 ? 30 : 0);
+    ids.forEach(id => {
+      const h = ctx.nodes.get(id).offsetHeight;
+      if (stacked) { out[id] = { x: Math.max(0, (W - CARD_W) / 2), y: stackY }; stackY += h + 50; }
+      else { out[id] = { x: PAD + c * (CARD_W + gapX), y }; y += h + 40; }
+    });
+  });
+  return out;
+}
+
+function ensurePositions(ctx, p) {
+  let auto = null;
+  for (const s of p.services) {
+    if (ctx.pos.has(s.id)) continue;
+    const saved = layout[`${ctx.name}/${s.id}`];
+    if (saved) { ctx.pos.set(s.id, saved); continue; }
+    auto ||= autoLayout(ctx, p);
+    ctx.pos.set(s.id, auto[s.id]);
+  }
+}
+
+function anchors(a, b) {
+  if (b.x >= a.x + a.w + 30) return { x1: a.x + a.w, y1: a.y + a.h / 2, x2: b.x, y2: b.y + b.h / 2, horiz: true, dir: 1 };
+  if (b.x + b.w <= a.x - 30) return { x1: a.x, y1: a.y + a.h / 2, x2: b.x + b.w, y2: b.y + b.h / 2, horiz: true, dir: -1 };
+  const down = b.y >= a.y;
+  return { x1: a.x + a.w / 2, y1: down ? a.y + a.h : a.y, x2: b.x + b.w / 2, y2: down ? b.y : b.y + b.h, horiz: false, dir: down ? 1 : -1 };
+}
+
+function scheduleDraw(ctx) {
+  if (ctx.frame) return;
+  ctx.frame = requestAnimationFrame(() => { ctx.frame = 0; draw(ctx); });
+}
+
+function draw(ctx) {
+  const W = ctx.canvas.clientWidth;
+  let bottom = 0;
+  const rects = new Map();
+  for (const [id, node] of ctx.nodes) {
+    const p = ctx.pos.get(id);
+    const w = node.offsetWidth, h = node.offsetHeight;
+    const x = Math.min(Math.max(0, W - w), Math.max(0, p.x));
+    node.style.left = x + 'px';
+    node.style.top = p.y + 'px';
+    rects.set(id, { x, y: p.y, w, h });
+    bottom = Math.max(bottom, p.y + h);
+  }
+  ctx.canvas.style.height = Math.max(340, bottom + PAD) + 'px';
+
+  for (const l of ctx.links) {
+    const e = ctx.edges.get(`${l.from}>${l.to}`);
+    const a = rects.get(l.from), b = rects.get(l.to);
+    if (!e || !a || !b) continue;
+    const { x1, y1, x2, y2, horiz, dir } = anchors(a, b);
+    const k = Math.max(40, (horiz ? Math.abs(x2 - x1) : Math.abs(y2 - y1)) / 2) * dir;
+    const [c1x, c1y, c2x, c2y] = horiz ? [x1 + k, y1, x2 - k, y2] : [x1, y1 + k, x2, y2 - k];
+    e.path.setAttribute('d', `M${x1},${y1} C${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`);
+    e.label.style.left = (x1 + 3 * c1x + 3 * c2x + x2) / 8 + 'px';
+    e.label.style.top = (y1 + 3 * c1y + 3 * c2y + y2) / 8 + 'px';
+  }
+}
+
+/* ---------- обновление данных ---------- */
+
+function updateProject(ctx, p) {
+  const allUp = p.services.every(s => s.up) && p.links.every(l => l.up);
+  const anyUp = p.services.some(s => s.up);
+  ctx.badge.className = 'badge ' + (allUp ? 'up' : anyUp ? '' : 'down');
+  ctx.badge.textContent = allUp ? 'всё работает' : anyUp ? 'частично' : 'остановлен';
+  ctx.links = p.links;
+
+  const ids = new Set(p.services.map(s => s.id));
+  for (const [id, node] of ctx.nodes) {
+    if (!ids.has(id)) { node.remove(); ctx.nodes.delete(id); ctx.pos.delete(id); }
+  }
+  p.services.forEach(s => {
+    fillService(ctx.nodes.get(s.id) || makeNode(ctx, s.id), s);
+    note(`${p.name}/${s.id}`, s.up);
+  });
+
+  const keys = new Set(p.links.map(l => `${l.from}>${l.to}`));
+  for (const [key, e] of ctx.edges) {
+    if (!keys.has(key)) { e.path.remove(); e.label.remove(); ctx.edges.delete(key); }
+  }
+  p.links.forEach(l => {
+    const key = `${l.from}>${l.to}`;
+    let e = ctx.edges.get(key);
+    if (!e) {
+      e = { path: document.createElementNS(SVG_NS, 'path'), label: el('div') };
+      ctx.svg.append(e.path);
+      ctx.canvas.append(e.label);
+      ctx.edges.set(key, e);
+    }
+    const state = l.up ? 'up' : 'down';
+    e.path.setAttribute('class', 'edge ' + state);
+    e.path.setAttribute('marker-end', `url(#arrow-${state})`);
+    e.label.className = 'edge-label ' + state;
+    e.label.textContent = `${l.label} · ${linkText(l, p.services)}`;
+    note(`${p.name}: ${l.from}→${l.to}`, l.up);
+  });
+
+  ensurePositions(ctx, p);
+  draw(ctx);
+}
+
+async function check() {
+  let st;
+  try {
+    st = await (await fetch('/api/status', { cache: 'no-store' })).json();
+  } catch {
+    $('updated').textContent = 'vizor недоступен';
+    return;
+  }
+  const box = $('projects');
+  if (!st.projects.length) {
+    ctxs.clear();
+    box.replaceChildren(el('p', 'empty', 'Проекты не найдены: добавьте vizor.json в корень проекта.'));
+  } else {
+    if (!ctxs.size) box.replaceChildren();
+    const names = new Set(st.projects.map(p => p.name));
+    for (const [name, ctx] of ctxs) {
+      if (!names.has(name)) { ctx.sec.remove(); ctxs.delete(name); }
+    }
+    for (const p of st.projects) {
+      let ctx = ctxs.get(p.name);
+      if (!ctx) { ctx = buildProject(p.name); ctxs.set(p.name, ctx); box.append(ctx.sec); }
+      updateProject(ctx, p);
+    }
+  }
+  $('updated').textContent = new Date(st.checkedAt).toLocaleTimeString();
+}
+
+function schedule() {
+  clearInterval(timer);
+  timer = setInterval(check, Math.max(1, Number($('interval').value) || 5) * 1000);
+}
+
+$('refresh').onclick = check;
+$('interval').onchange = schedule;
+$('reset').onclick = () => {
+  layout = {};
+  saveLayout();
+  ctxs.forEach(ctx => ctx.pos.clear());
+  check();
+};
+window.addEventListener('resize', () => ctxs.forEach(scheduleDraw));
+check(); schedule();
+</script>
+</body>
+</html>

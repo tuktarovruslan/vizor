@@ -1,13 +1,31 @@
 import http from 'node:http';
 import net from 'node:net';
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadProjects } from './manifests.js';
+import { buildArchitecture } from './architecture.js';
 
 const port = Number(process.env.PORT) || 4000;
 const TIMEOUT = 3000;
 
-const indexPath = fileURLToPath(new URL('../public/index.html', import.meta.url));
+const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
+const threeDir = fileURLToPath(new URL('../node_modules/three/', import.meta.url));
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+
+// Отдаёт файл из папки root, не выпуская путь за её пределы
+async function sendFile(res, root, rel) {
+  const file = path.join(root, rel);
+  if (!file.startsWith(root)) return false;
+  try {
+    const body = await readFile(file);
+    res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream' });
+    res.end(body);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function probeTcp(url) {
   const { hostname, port } = new URL(url);
@@ -24,8 +42,13 @@ function probeTcp(url) {
   });
 }
 
+const SELF_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
 async function probe(url) {
   if (url.startsWith('tcp://')) return probeTcp(url);
+  // vizor описан в своём же vizor.json: опрос самого себя через /api/status зациклился бы
+  const u = new URL(url);
+  if (SELF_HOSTS.has(u.hostname) && Number(u.port) === port) return { up: true, ms: 0, http: 200, data: null };
   const t0 = performance.now();
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT) });
@@ -77,19 +100,35 @@ async function getStatus() {
   };
 }
 
-const server = http.createServer(async (req, res) => {
+const PAGES = { '/': 'index.html', '/status': 'status.html' };
+
+const server = http.createServer((req, res) => {
+  // ошибка одного запроса не должна ронять весь vizor
+  handle(req, res).catch((err) => {
+    console.error(err);
+    if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: String(err.message || err) }));
+  });
+});
+
+async function handle(req, res) {
   const { pathname } = new URL(req.url, 'http://localhost');
   if (pathname === '/api/status') {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     res.end(JSON.stringify(await getStatus()));
-  } else if (pathname === '/') {
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-    res.end(await readFile(indexPath));
-  } else {
-    res.writeHead(404, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not found' }));
+    return;
   }
-});
+  if (pathname === '/api/architecture') {
+    const projects = await loadProjects();
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({ builtAt: new Date().toISOString(), projects: await Promise.all(projects.map(buildArchitecture)) }));
+    return;
+  }
+  if (PAGES[pathname] && (await sendFile(res, publicDir, PAGES[pathname]))) return;
+  if (pathname.startsWith('/vendor/three/') && (await sendFile(res, threeDir, decodeURIComponent(pathname.slice(14))))) return;
+  res.writeHead(404, { 'content-type': 'application/json' });
+  res.end(JSON.stringify({ error: 'Not found' }));
+}
 
 server.listen(port, async () => {
   console.log(`Vizor запущен: http://localhost:${port}`);

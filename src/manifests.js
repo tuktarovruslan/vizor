@@ -4,7 +4,7 @@ import path from 'node:path';
 
 export const warehouseRoot = fileURLToPath(new URL('../../', import.meta.url));
 
-const SKIP = new Set(['node_modules', 'vizor']);
+const SKIP = new Set(['node_modules']);
 
 // Каждый проект кладёт в свой корень vizor.json: сервисы, команды запуска и связи между ними.
 export async function loadProjects() {

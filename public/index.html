@@ -3,387 +3,678 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vizor</title>
+<title>Vizor · архитектура</title>
 <style>
   :root {
-    --bg: #f5f6f8; --card: #fff; --text: #1c2330; --muted: #6b7587; --border: #dde1e8;
-    --ok: #1a9c56; --bad: #d63a3a; --idle: #9aa3b2; --grid: #e6e9ef;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #12151b; --card: #1b2029; --text: #e6e9ef; --muted: #8b95a7; --border: #2b3240;
-            --ok: #3ecf7d; --bad: #f0605d; --idle: #6b7587; --grid: #1c212b; }
+    --bg: #0d1016; --panel: rgba(22, 27, 36, .92); --text: #e6e9ef; --muted: #8b95a7; --border: #2b3240;
+    --ok: #3ecf7d; --bad: #f0605d; --accent: #4f8cff; --recent: #ffe066;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--text);
-         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 1100px; margin: 0 auto; }
-  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-  h1 { font-size: 20px; margin: 0; }
-  .meta { color: var(--muted); font-size: 13px; }
-  button { font: inherit; padding: 4px 12px; border: 1px solid var(--border); border-radius: 6px;
-           background: var(--card); color: var(--text); cursor: pointer; }
-  .project { margin: 28px 0; }
-  .project > h2 { font-size: 17px; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
-  .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: var(--border); color: var(--muted); }
-  .badge.up { background: transparent; color: var(--ok); border: 1px solid var(--ok); }
-  .badge.down { background: transparent; color: var(--bad); border: 1px solid var(--bad); }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+               font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #scene { position: fixed; inset: 0; }
+  #labels { position: fixed; inset: 0; pointer-events: none; }
+  a { color: inherit; }
+  button { font: inherit; color: inherit; cursor: pointer; }
 
-  /* «пространство», в котором висят плитки */
-  .canvas { position: relative; min-height: 340px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
-            background-color: var(--card); background-image: radial-gradient(var(--grid) 1.2px, transparent 1.2px); background-size: 22px 22px; }
-  .canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-  .edge { fill: none; stroke: var(--idle); stroke-width: 2.5; stroke-linecap: round; }
-  .edge.up { stroke: var(--ok); stroke-dasharray: 7 6; animation: flow 1s linear infinite; }
-  .edge.down { stroke: var(--bad); stroke-dasharray: 3 7; }
-  @keyframes flow { to { stroke-dashoffset: -13; } }
-  @media (prefers-reduced-motion: reduce) { .edge.up { animation: none; } }
-  .edge-label { position: absolute; z-index: 3; transform: translate(-50%, -50%); pointer-events: none; white-space: nowrap;
-                font-size: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 2px 9px; color: var(--muted); }
-  .edge-label.up { color: var(--ok); border-color: var(--ok); }
-  .edge-label.down { color: var(--bad); border-color: var(--bad); }
+  .panel { position: fixed; background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+           backdrop-filter: blur(6px); z-index: 10; }
+  #top { top: 12px; left: 12px; right: 12px; display: flex; align-items: center; gap: 14px; padding: 8px 12px; flex-wrap: wrap; }
+  #top h1 { font-size: 16px; margin: 0; letter-spacing: .02em; }
+  #tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  #tabs button { padding: 4px 12px; border-radius: 8px; border: 1px solid var(--border); background: transparent; }
+  #tabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #top .meta { margin-left: auto; color: var(--muted); font-size: 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  #top .meta a { color: var(--text); }
 
-  .node { position: absolute; z-index: 2; width: 230px; background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-          padding: 14px 16px; cursor: grab; touch-action: none; user-select: none; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-  .node.drag { cursor: grabbing; z-index: 5; box-shadow: 0 10px 24px rgba(0,0,0,.25); }
-  .node h3 { margin: 0 0 2px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
-  .node .type { margin-left: auto; font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--idle); flex: none; }
-  .up .dot { background: var(--ok); } .down .dot { background: var(--bad); }
-  .state { font-weight: 600; font-size: 14px; } .up .state { color: var(--ok); } .down .state { color: var(--bad); }
-  dl { margin: 8px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 13px; }
-  dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
-  dd a { color: inherit; text-decoration: underline; text-decoration-color: var(--idle); text-underline-offset: 2px; }
-  dd a:hover { color: var(--ok); text-decoration-color: currentColor; }
+  #legend { left: 12px; bottom: 12px; padding: 10px 14px; font-size: 12px; max-width: 290px; }
+  #legend h2, #recent h2 { font-size: 12px; margin: 0 0 6px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  #legend ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 12px; }
+  #legend li { display: flex; align-items: center; gap: 6px; }
+  .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .ln { width: 18px; height: 3px; border-radius: 2px; flex: none; }
+  #legend .hint { color: var(--muted); margin: 6px 0 0; }
+  #legend summary { cursor: pointer; color: var(--muted); }
 
-  .empty { color: var(--muted); }
-  details { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; font-size: 13px; }
-  summary { cursor: pointer; font-weight: 600; }
-  label.int { display: inline-flex; gap: 6px; align-items: center; margin-top: 8px; }
-  input { width: 90px; font: inherit; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
-  pre { background: var(--bg); padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 12px; }
-  ul.log { list-style: none; margin: 16px 0 0; padding: 0; font: 12px/1.6 ui-monospace, Consolas, monospace; color: var(--muted); }
+  #recent { right: 12px; bottom: 12px; padding: 10px 14px; font-size: 12px; width: 260px; max-height: 40vh; overflow: auto; }
+  #recent ul { list-style: none; margin: 0; padding: 0; }
+  #recent li button { width: 100%; text-align: left; background: none; border: 0; padding: 3px 0; display: flex; gap: 8px; }
+  #recent li button:hover .name { color: var(--recent); }
+  #recent .ago { color: var(--muted); margin-left: auto; white-space: nowrap; }
+  #recent .empty { color: var(--muted); }
+
+  #info { top: 64px; right: 12px; width: 320px; max-height: calc(100vh - 64px - 40vh - 36px); overflow: auto; padding: 14px 16px; display: none; }
+  #info.open { display: block; }
+  #info h3 { margin: 0 32px 2px 0; font-size: 16px; overflow-wrap: anywhere; }
+  #info .kind { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  #info .close { position: absolute; top: 8px; right: 8px; background: none; border: 0; font-size: 18px; color: var(--muted); }
+  #info dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 13px; }
+  #info dt { color: var(--muted); } #info dd { margin: 0; overflow-wrap: anywhere; }
+  #info h4 { margin: 12px 0 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+  #info ul { list-style: none; margin: 0; padding: 0; }
+  #info li button { background: none; border: 0; padding: 2px 0; text-align: left; display: flex; gap: 8px; align-items: center; }
+  #info li button:hover { color: var(--recent); }
+  #info .rel { color: var(--muted); font-size: 11px; }
+
+  /* подписи в 3D */
+  .lbl { font-size: 11px; color: #cfd6e2; white-space: nowrap; text-shadow: 0 1px 3px #000, 0 0 2px #000; padding-top: 4px; transition: opacity .2s; }
+  .lbl.recent { color: var(--recent); font-weight: 600; }
+  .lbl.hl { color: #fff; font-weight: 600; font-size: 12px; }
+  .cl { font-size: 12px; color: #9fb0c9; white-space: nowrap; text-shadow: 0 1px 3px #000; letter-spacing: .03em; }
+  .svc { font-size: 14px; font-weight: 600; white-space: nowrap; padding: 3px 10px; border-radius: 8px; background: rgba(13,16,22,.8);
+         border: 1px solid var(--border); display: flex; gap: 8px; align-items: center; }
+  .svc .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .svc.up .dot { background: var(--ok); } .svc.down .dot { background: var(--bad); }
+  .svc .st { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .floor { font-size: 20px; font-weight: 700; letter-spacing: .08em; white-space: nowrap; opacity: .85; text-shadow: 0 2px 6px #000; }
+  .floor small { display: block; font-size: 12px; font-weight: 400; letter-spacing: 0; color: var(--muted); }
+  .floor.empty { opacity: .45; }
+  .elbl { font-size: 11px; color: #ffd166; white-space: nowrap; background: rgba(13,16,22,.75); padding: 1px 6px; border-radius: 6px; }
+
+  #msg { position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
+  @media (max-width: 760px) {
+    #legend { display: none; }
+    #info { left: 12px; width: auto; }
+    #recent { left: 12px; width: auto; max-height: 25vh; }
+  }
 </style>
+<script type="importmap">
+{ "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
+</script>
 </head>
 <body>
-<main>
-  <header>
-    <h1>Vizor</h1>
-    <span class="meta">плитки можно перетаскивать · обновлено: <span id="updated">—</span> ·
-      <button id="reset" title="Вернуть расположение по умолчанию">Сбросить расположение</button>
-      <button id="refresh">Обновить</button></span>
-  </header>
+<div id="scene"></div>
+<div id="labels"></div>
+<div id="msg">загрузка…</div>
 
-  <div id="projects"><p class="empty">загрузка…</p></div>
+<header id="top" class="panel">
+  <h1>Vizor</h1>
+  <nav id="tabs" aria-label="Проекты"></nav>
+  <span class="meta">
+    <span id="updated">—</span>
+    <button id="home" style="background:none;border:1px solid var(--border);border-radius:8px;padding:3px 10px">Общий вид</button>
+    <a href="/status">Статус сервисов</a>
+  </span>
+</header>
 
-  <details>
-    <summary>Как подключить проект</summary>
-    <label class="int">Интервал, сек <input id="interval" type="number" value="5" min="1"></label>
-    <p>Vizor ищет в корне warehouse папки с файлом <code>vizor.json</code> и опрашивает описанные там сервисы.
-       Новый проект появится на странице без перезапуска. Те же манифесты использует <code>node dev.mjs</code>
-       для запуска сервисов. Расположение плиток запоминается в браузере.</p>
-<pre>{
-  "name": "my-project",
-  "services": [
-    { "id": "api", "type": "backend", "stack": "Node", "dir": "api",
-      "command": "npm run dev", "url": "http://localhost:3100", "health": "/health" }
-  ],
-  "links": [
-    { "from": "web", "to": "api", "label": "/api proxy", "via": "/api/health" }
-  ]
-}</pre>
+<aside id="legend" class="panel">
+  <details open>
+    <summary>Как читать схему</summary>
+    <h2 style="margin-top:8px">Блоки</h2>
+    <ul id="kinds"></ul>
+    <h2>Связи</h2>
+    <ul id="edgekinds"></ul>
+    <p class="hint">Тяните мышью — вращать, колесо — приблизить, правая кнопка — сдвинуть. Клик по блоку — подробности и связи.</p>
   </details>
+</aside>
 
-  <ul class="log" id="log"></ul>
-</main>
+<aside id="recent" class="panel">
+  <h2>Недавно изменено</h2>
+  <ul id="recentList"><li class="empty">пока ничего</li></ul>
+</aside>
 
-<!-- общие стрелки для связей: цвета берутся из тем -->
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <defs>
-    <marker id="arrow-up" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--ok)"/></marker>
-    <marker id="arrow-down" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--bad)"/></marker>
-  </defs>
-</svg>
+<aside id="info" class="panel" aria-live="polite"></aside>
 
-<script>
-const $ = id => document.getElementById(id);
-const SVG_NS = 'http://www.w3.org/2000/svg';
-const LS_KEY = 'vizor.layout.v1';
-const CARD_W = 230, PAD = 24;
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
-const ctxs = new Map();   // имя проекта -> контекст отрисовки
-let timer, prev = {};
-let layout = loadLayout();
+const $ = (id) => document.getElementById(id);
 
-function loadLayout() {
-  try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; }
+/* ---------- словарь: что значит каждый блок и связь ---------- */
+
+const KINDS = {
+  page:      { name: 'Страница / экран',      color: 0x4f8cff, shape: 'tall' },
+  component: { name: 'Компонент интерфейса',  color: 0x39c0ff, shape: 'cube' },
+  unit:      { name: 'Компонент библиотеки',  color: 0xa879ff, shape: 'cube' },
+  store:     { name: 'Хранилище состояния',   color: 0xff7ab6, shape: 'cyl' },
+  module:    { name: 'Модуль с логикой',      color: 0xf5b544, shape: 'ball' },
+  entry:     { name: 'Точка входа сервера',   color: 0xff9f43, shape: 'tall' },
+  route:     { name: 'Адрес API',             color: 0xffd166, shape: 'cone' },
+  table:     { name: 'Таблица базы данных',   color: 0xe98a4f, shape: 'cyl' },
+  style:     { name: 'Стили',                 color: 0x6fd3c1, shape: 'flat' },
+  data:      { name: 'Данные / описание',     color: 0x8a94a6, shape: 'flat' },
+  config:    { name: 'Настройки сборки',      color: 0x5b6475, shape: 'flat' },
+};
+const EDGES = {
+  import:  { name: 'подключает файл',          color: 0x6d86b8, out: 'Подключает', in: 'Подключается в' },
+  route:   { name: 'объявляет адрес API',      color: 0xffd166, out: 'Объявляет адрес', in: 'Объявлен в' },
+  api:     { name: 'запрос к API (фронт → бэк)', color: 0xffd166, out: 'Запрашивает', in: 'Запрашивается из' },
+  db:      { name: 'работа с таблицей',        color: 0xe98a4f, out: 'Работает с таблицей', in: 'Используется в' },
+  service: { name: 'связь сервисов',           color: 0x9aa3b2, out: 'Связан с', in: 'Связан с' },
+};
+const FLOORS = [
+  { key: 'frontend', title: 'ФРОНТЕНД', sub: 'то, что видит пользователь', color: 0x4f8cff, y: 16 },
+  { key: 'backend',  title: 'БЭКЕНД',   sub: 'сервер и логика',            color: 0xf5b544, y: 0 },
+  { key: 'db',       title: 'БАЗА ДАННЫХ', sub: 'где хранятся данные',     color: 0xe98a4f, y: -16 },
+];
+const RECENT_MS = 15 * 60 * 1000;
+const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+
+for (const k of Object.values(KINDS)) $('kinds').insertAdjacentHTML('beforeend', `<li><span class="sw" style="background:${hex(k.color)}"></span>${k.name}</li>`);
+for (const [key, e] of Object.entries(EDGES)) if (key !== 'route') $('edgekinds').insertAdjacentHTML('beforeend', `<li><span class="ln" style="background:${hex(e.color)}"></span>${e.name}</li>`);
+$('edgekinds').insertAdjacentHTML('beforeend', `<li><span class="sw" style="background:var(--recent);border-radius:50%"></span>изменён за 15 мин</li>`);
+
+/* ---------- сцена ---------- */
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+$('scene').append(renderer.domElement);
+const labelRenderer = new CSS2DRenderer({ element: $('labels') });
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1016);
+scene.fog = new THREE.Fog(0x0d1016, 120, 320);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+camera.position.set(40, 38, 70);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxDistance = 300;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+sun.position.set(30, 60, 40);
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.35);
+fill.position.set(-40, -20, -30);
+scene.add(fill);
+
+function resize() {
+  renderer.setSize(innerWidth, innerHeight);
+  labelRenderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
 }
-function saveLayout() {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(layout)); } catch { /* localStorage недоступен */ }
-}
+addEventListener('resize', resize);
+resize();
 
-function el(tag, cls, text) {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text != null) e.textContent = text;
-  return e;
+function label(cls, html) {
+  const div = document.createElement('div');
+  div.className = cls;
+  div.innerHTML = html;
+  return new CSS2DObject(div);
 }
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-function row(dl, name, value) {
-  const dd = el('dd', null, value);
-  dl.append(el('dt', null, name), dd);
-  return dd;
-}
+/* ---------- состояние ---------- */
 
-function urlRow(dl, url) {
-  const dd = row(dl, 'URL', '');
-  if (!/^https?:\/\//.test(url)) return dd.append(url);
-  const a = el('a', null, url);
-  a.href = url;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
-  dd.append(a);
-}
+let data = null, signature = '', current = null;
+let world = null;          // THREE.Group текущего проекта
+let view = null;           // { nodes: Map id → {n, mesh, pos, label, ring}, edges: [], platforms: Map }
+let hovered = null, selected = null;
+let status = {};
 
-function linkText(l, services) {
-  if (l.up) return `связь есть · ${l.ms} мс`;
-  const from = services.find(s => s.id === l.from), to = services.find(s => s.id === l.to);
-  if (from && !from.up) return `${l.from} недоступен`;
-  if (to && !to.up) return `${l.to} недоступен`;
-  return 'ошибка' + (l.http ? ' HTTP ' + l.http : '');
-}
+function loadSaved() { try { return localStorage.getItem('vizor.project'); } catch { return null; } }
+function save(name) { try { localStorage.setItem('vizor.project', name); } catch { /* недоступно */ } }
 
-function note(name, up) {
-  if (prev[name] === up) return;
-  if (name in prev) {
-    $('log').prepend(el('li', null, `${new Date().toLocaleTimeString()}  ${name}: ${up ? 'поднялся' : 'недоступен'}`));
+/* ---------- раскладка ---------- */
+
+const CELL = 3.4;
+
+// Узлы сервиса группируются по папкам; папки укладываются «полками» на платформе
+function layoutService(nodes) {
+  const clusters = new Map();
+  for (const n of nodes) (clusters.get(n.cluster) || clusters.set(n.cluster, []).get(n.cluster)).push(n);
+  const boxes = [...clusters.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([name, list]) => {
+    list.sort((a, b) => a.kind.localeCompare(b.kind) || a.label.localeCompare(b.label));
+    const cols = Math.ceil(Math.sqrt(list.length * 1.6));
+    const rows = Math.ceil(list.length / cols);
+    return { name, list, cols, rows, w: cols * CELL, d: rows * CELL + 1.6 };
+  });
+  const area = boxes.reduce((s, b) => s + (b.w + 2) * (b.d + 2), 0);
+  const maxW = Math.max(14, Math.sqrt(area) * 1.5);
+  let x = 0, z = 0, rowD = 0, width = 0;
+  for (const b of boxes) {
+    if (x > 0 && x + b.w > maxW) { x = 0; z += rowD + 2; rowD = 0; }
+    b.x = x; b.z = z;
+    x += b.w + 2; rowD = Math.max(rowD, b.d); width = Math.max(width, x - 2);
   }
-  prev[name] = up;
-}
-
-/* ---------- построение проекта ---------- */
-
-function buildProject(name) {
-  const sec = el('section', 'project');
-  const title = el('h2', null, name);
-  const badge = el('span', 'badge');
-  title.append(badge);
-  const canvas = el('div', 'canvas');
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  canvas.append(svg);
-  sec.append(title, canvas);
-  return { name, sec, badge, canvas, svg, nodes: new Map(), edges: new Map(), pos: new Map(), links: [], frame: 0 };
-}
-
-function fillService(node, s) {
-  node.className = 'node ' + (s.up ? 'up' : 'down') + (node.classList.contains('drag') ? ' drag' : '');
-  const h = el('h3');
-  h.append(el('span', 'dot'), s.id, el('span', 'type', s.type));
-  const dl = el('dl');
-  urlRow(dl, s.url);
-  if (s.stack) row(dl, 'Стек', s.stack);
-  row(dl, 'Отклик', s.ms == null ? '—' : s.ms + ' мс');
-  if (s.uptime != null) row(dl, 'Аптайм', Math.round(s.uptime) + ' с');
-  node.replaceChildren(h, el('div', 'state', s.up ? 'работает' : 'не запущен'), dl);
-}
-
-function makeNode(ctx, id) {
-  const node = el('div', 'node');
-  let drag = null;
-  node.addEventListener('pointerdown', e => {
-    if (e.button !== 0 || e.target.closest('a')) return;
-    const p = ctx.pos.get(id);
-    drag = { px: e.clientX, py: e.clientY, x: p.x, y: p.y };
-    node.setPointerCapture(e.pointerId);
-    node.classList.add('drag');
-  });
-  node.addEventListener('pointermove', e => {
-    if (!drag) return;
-    const maxX = Math.max(0, ctx.canvas.clientWidth - node.offsetWidth);
-    ctx.pos.set(id, {
-      x: Math.min(maxX, Math.max(0, drag.x + e.clientX - drag.px)),
-      y: Math.max(0, drag.y + e.clientY - drag.py),
+  const depth = z + rowD;
+  const pos = new Map();
+  for (const b of boxes) {
+    b.list.forEach((n, i) => {
+      pos.set(n.id, { x: b.x + (i % b.cols) * CELL + CELL / 2 - width / 2, z: b.z + 1.6 + Math.floor(i / b.cols) * CELL + CELL / 2 - depth / 2 });
     });
-    scheduleDraw(ctx);
+    b.cx = b.x - width / 2; b.cz = b.z - depth / 2;
+  }
+  return { boxes, pos, width: Math.max(width, 8), depth: Math.max(depth, 6) };
+}
+
+/* ---------- построение ---------- */
+
+function geometryFor(shape) {
+  switch (shape) {
+    case 'tall': return new THREE.BoxGeometry(1.6, 2.6, 1.6);
+    case 'cyl':  return new THREE.CylinderGeometry(0.95, 0.95, 1.6, 24);
+    case 'ball': return new THREE.SphereGeometry(0.95, 24, 16);
+    case 'cone': return new THREE.ConeGeometry(0.85, 1.8, 4);
+    case 'flat': return new THREE.BoxGeometry(1.5, 0.5, 1.5);
+    default:     return new THREE.BoxGeometry(1.6, 1.6, 1.6);
+  }
+}
+const GEOMS = Object.fromEntries(['tall', 'cyl', 'ball', 'cone', 'flat', 'cube'].map((s) => [s, geometryFor(s)]));
+const HEIGHT = { tall: 2.6, cyl: 1.6, ball: 1.9, cone: 1.8, flat: 0.5, cube: 1.6 };
+
+function disposeWorld() {
+  if (!world) return;
+  world.traverse((o) => {
+    if (o.isCSS2DObject) o.element.remove();
+    if (o.geometry && !Object.values(GEOMS).includes(o.geometry)) o.geometry.dispose();
+    if (o.material) o.material.dispose();
   });
-  const end = () => {
-    if (!drag) return;
-    drag = null;
-    node.classList.remove('drag');
-    layout[`${ctx.name}/${id}`] = ctx.pos.get(id);
-    saveLayout();
+  scene.remove(world);
+  world = null;
+}
+
+function build(project) {
+  disposeWorld();
+  world = new THREE.Group();
+  scene.add(world);
+  view = { nodes: new Map(), edges: [], platforms: new Map(), particles: [] };
+
+  // платформы сервисов по этажам
+  const byLayer = { frontend: [], backend: [], db: [] };
+  for (const s of project.services) byLayer[s.layer].push(s);
+  let span = 30;
+  const layouts = new Map();
+  for (const s of project.services) layouts.set(s.id, layoutService(project.nodes.filter((n) => n.service === s.id)));
+  for (const f of FLOORS) {
+    const total = byLayer[f.key].reduce((sum, s) => sum + layouts.get(s.id).width + 6, -6);
+    span = Math.max(span, total + 16);
+  }
+  // чем шире проект, тем дальше этажи друг от друга, иначе они сливаются при наклоне
+  const gap = Math.min(40, Math.max(16, span * 0.3));
+  FLOORS.forEach((f, i) => { f.y = (1 - i) * gap; });
+
+  for (const f of FLOORS) {
+    const list = byLayer[f.key];
+    const floorDepth = Math.max(24, ...list.map((s) => layouts.get(s.id).depth + 10));
+    // этаж: полупрозрачная плоскость с сеткой
+    const plane = new THREE.Mesh(
+      new THREE.PlaneGeometry(span, floorDepth),
+      new THREE.MeshBasicMaterial({ color: f.color, transparent: true, opacity: list.length ? 0.05 : 0.025, side: THREE.DoubleSide, depthWrite: false }),
+    );
+    plane.rotation.x = -Math.PI / 2;
+    plane.position.y = f.y - 0.3;
+    world.add(plane);
+    const border = new THREE.LineSegments(new THREE.EdgesGeometry(plane.geometry), new THREE.LineBasicMaterial({ color: f.color, transparent: true, opacity: 0.35 }));
+    border.rotation.x = -Math.PI / 2;
+    border.position.y = f.y - 0.3;
+    world.add(border);
+    const fl = label('floor' + (list.length ? '' : ' empty'), `<span style="color:${hex(f.color)}">${f.title}</span><small>${list.length ? f.sub : 'в этом проекте нет'}</small>`);
+    fl.position.set(-span / 2 - 1, f.y, 0);
+    fl.center.set(1, 0.5);
+    world.add(fl);
+
+    let x = -(list.reduce((sum, s) => sum + layouts.get(s.id).width + 6, -6)) / 2;
+    for (const s of list) {
+      const L = layouts.get(s.id);
+      const cx = x + L.width / 2;
+      x += L.width + 6;
+      buildPlatform(project, s, L, cx, f.y);
+    }
+  }
+
+  buildEdges(project);
+  fitCamera(true);
+}
+
+function buildPlatform(project, s, L, cx, y) {
+  const w = L.width + 3, d = L.depth + 3;
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(w, 0.4, d), new THREE.MeshStandardMaterial({ color: 0x1b2230, transparent: true, opacity: 0.85, roughness: 0.9 }));
+  slab.position.set(cx, y - 0.2, 0);
+  world.add(slab);
+  const outline = new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry), new THREE.LineBasicMaterial({ color: 0x6b7587 }));
+  outline.position.copy(slab.position);
+  world.add(outline);
+  const sl = label('svc', `<span class="dot"></span>${esc(s.id)} <span class="st">${esc(s.stack || s.type)}</span><span class="st state"></span>`);
+  sl.position.set(cx, y + 0.2, -d / 2 - 0.5);
+  sl.center.set(0.5, 1);
+  world.add(sl);
+  view.platforms.set(s.id, { outline, label: sl, center: new THREE.Vector3(cx, y, 0) });
+
+  // подписи папок
+  for (const b of L.boxes) {
+    if (!b.name && L.boxes.length === 1) continue;
+    const tile = new THREE.Mesh(new THREE.PlaneGeometry(b.w + 0.6, b.d + 0.4), new THREE.MeshBasicMaterial({ color: 0x2a3446, transparent: true, opacity: 0.55, depthWrite: false }));
+    tile.rotation.x = -Math.PI / 2;
+    tile.position.set(cx + b.cx + b.w / 2, y + 0.02, b.cz + b.d / 2);
+    world.add(tile);
+    const cl = label('cl', esc(b.name || 'основные файлы'));
+    cl.position.set(cx + b.cx + 0.2, y + 0.05, b.cz + 0.7);
+    cl.center.set(0, 0.5);
+    world.add(cl);
+  }
+
+  for (const n of project.nodes.filter((n) => n.service === s.id)) {
+    const k = KINDS[n.kind] || KINDS.module;
+    const p = L.pos.get(n.id);
+    const h = HEIGHT[k.shape];
+    const mesh = new THREE.Mesh(GEOMS[k.shape], new THREE.MeshStandardMaterial({ color: k.color, roughness: 0.45, metalness: 0.1, transparent: true, emissive: 0x000000 }));
+    mesh.position.set(cx + p.x, y + h / 2, p.z);
+    if (k.shape === 'cone') mesh.rotation.y = Math.PI / 4;
+    mesh.userData.id = n.id;
+    world.add(mesh);
+    const lb = label('lbl', esc(n.label));
+    lb.position.set(0, -h / 2, 0);
+    lb.center.set(0.5, 0);
+    mesh.add(lb);
+    view.nodes.set(n.id, { n, mesh, label: lb, top: new THREE.Vector3(cx + p.x, y + h, p.z), base: new THREE.Vector3(cx + p.x, y, p.z), ring: null, out: [], in: [] });
+  }
+}
+
+function curveBetween(a, b, kind) {
+  if (kind === 'service') {
+    const mid = a.center.clone().add(b.center).multiplyScalar(0.5);
+    mid.z -= 10;
+    return new THREE.QuadraticBezierCurve3(a.center.clone(), mid, b.center.clone());
+  }
+  const start = a.top.clone(), end = b.top.clone();
+  const mid = start.clone().add(end).multiplyScalar(0.5);
+  const dist = start.distanceTo(end);
+  if (Math.abs(start.y - end.y) < 1) mid.y += Math.min(10, 1.2 + dist * 0.28);
+  else { mid.y = (start.y + end.y) / 2; mid.x += (end.x - start.x) * 0.1; mid.z += 4; }
+  return new THREE.QuadraticBezierCurve3(start, mid, end);
+}
+
+function addEdgeObject(e, a, b) {
+  const meta = EDGES[e.kind] || EDGES.import;
+  const curve = curveBetween(a, b, e.kind);
+  let obj;
+  if (e.kind === 'import' || e.kind === 'route') {
+    obj = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(24)), new THREE.LineBasicMaterial({ color: meta.color, transparent: true, opacity: e.kind === 'route' ? 0.7 : 0.35 }));
+  } else {
+    obj = new THREE.Mesh(new THREE.TubeGeometry(curve, 40, e.kind === 'service' ? 0.18 : 0.09, 6), new THREE.MeshBasicMaterial({ color: meta.color, transparent: true, opacity: 0.75 }));
+    // бегущие точки показывают направление запроса
+    for (let i = 0; i < 3; i++) {
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(e.kind === 'service' ? 0.35 : 0.22, 10, 8), new THREE.MeshBasicMaterial({ color: meta.color }));
+      world.add(dot);
+      view.particles.push({ dot, curve, t: i / 3, edge: e });
+    }
+  }
+  world.add(obj);
+  const rec = { e, obj, base: obj.material.opacity };
+  view.edges.push(rec);
+  return rec;
+}
+
+function buildEdges(project) {
+  for (const e of project.edges) {
+    const a = view.nodes.get(e.from), b = view.nodes.get(e.to);
+    if (!a || !b) continue;
+    addEdgeObject(e, a, b);
+    a.out.push(e); b.in.push(e);
+  }
+  // связи из vizor.json между сервисами, у которых не нашлось связей на уровне файлов
+  const svcOf = (id) => view.nodes.get(id)?.n.service;
+  for (const l of project.links) {
+    const found = project.edges.some((e) => svcOf(e.from) === l.from && svcOf(e.to) === l.to && e.kind !== 'import');
+    const a = view.platforms.get(l.from), b = view.platforms.get(l.to);
+    if (found || !a || !b || l.from === l.to) continue;
+    const rec = addEdgeObject({ kind: 'service', from: l.from, to: l.to, label: l.label }, a, b);
+    rec.service = true;
+  }
+}
+
+/* ---------- камера ---------- */
+
+function fitCamera(keepIfSame) {
+  if (!world) return;
+  const box = new THREE.Box3().setFromObject(world);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const r = Math.max(size.x, size.y * 1.4, size.z) * 0.8 + 10;
+  if (keepIfSame && fitCamera.last === current) return;
+  fitCamera.last = current;
+  flyTo(center, new THREE.Vector3(center.x + r * 0.45, center.y + r * 0.55, center.z + r * 1.05));
+}
+
+let flight = null;
+function flyTo(target, position) {
+  flight = { t: 0, fromT: controls.target.clone(), toT: target.clone(), fromP: camera.position.clone(), toP: position.clone() };
+}
+function focusNode(id) {
+  const v = view?.nodes.get(id);
+  if (!v) return;
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  flyTo(v.base, v.base.clone().add(dir.multiplyScalar(26)));
+  select(id);
+}
+
+/* ---------- подсветка и подробности ---------- */
+
+function neighbours(id) {
+  const set = new Set([id]);
+  const v = view.nodes.get(id);
+  if (!v) return set;
+  v.out.forEach((e) => set.add(e.to));
+  v.in.forEach((e) => set.add(e.from));
+  return set;
+}
+
+function applyHighlight() {
+  if (!view) return;
+  const focus = hovered || selected;
+  const near = focus ? neighbours(focus) : null;
+  for (const [id, v] of view.nodes) {
+    const on = !near || near.has(id);
+    v.mesh.material.opacity = on ? 1 : 0.15;
+    v.label.element.style.opacity = on ? '' : '0.15';
+    v.label.element.classList.toggle('hl', id === focus);
+  }
+  for (const r of view.edges) {
+    const on = !focus || r.e.from === focus || r.e.to === focus;
+    r.obj.material.opacity = on ? (focus ? 1 : r.base) : 0.04;
+  }
+  for (const p of view.particles) p.dot.visible = !focus || p.edge.from === focus || p.edge.to === focus;
+}
+
+function ago(ms) {
+  const s = Math.round((Date.now() - ms) / 1000);
+  if (s < 60) return 'только что';
+  if (s < 3600) return `${Math.round(s / 60)} мин назад`;
+  if (s < 86400) return `${Math.round(s / 3600)} ч назад`;
+  return new Date(ms).toLocaleDateString();
+}
+
+function select(id) {
+  selected = id;
+  applyHighlight();
+  const box = $('info');
+  const v = id && view.nodes.get(id);
+  if (!v) { box.classList.remove('open'); return; }
+  const n = v.n, k = KINDS[n.kind] || KINDS.module;
+  const svc = data.projects.find((p) => p.name === current).services.find((s) => s.id === n.service);
+  const item = (otherId, rel) => {
+    const o = view.nodes.get(otherId)?.n;
+    if (!o) return '';
+    return `<li><button data-go="${esc(otherId)}"><span class="sw" style="background:${hex((KINDS[o.kind] || KINDS.module).color)}"></span>${esc(o.label)} <span class="rel">${esc(rel || '')}</span></button></li>`;
   };
-  node.addEventListener('pointerup', end);
-  node.addEventListener('pointercancel', end);
-  ctx.canvas.append(node);
-  ctx.nodes.set(id, node);
-  return node;
+  const groups = {};
+  for (const e of v.out) (groups[EDGES[e.kind].out] ||= []).push(item(e.to, e.label));
+  for (const e of v.in) (groups[EDGES[e.kind].in] ||= []).push(item(e.from, e.label));
+  box.innerHTML = `
+    <button class="close" aria-label="Закрыть">×</button>
+    <h3>${esc(n.label)}</h3>
+    <div class="kind"><span class="sw" style="display:inline-block;background:${hex(k.color)}"></span> ${k.name}</div>
+    <dl>
+      <dt>Слой</dt><dd>${FLOORS.find((f) => f.key === n.layer).title.toLowerCase()}</dd>
+      <dt>Сервис</dt><dd>${esc(svc ? `${svc.id} (${svc.stack || svc.type})` : n.service)}</dd>
+      <dt>Где лежит</dt><dd>${esc(n.path)}</dd>
+      ${n.files.length > 1 ? `<dt>Файлов</dt><dd>${n.files.length}: ${n.files.map((f) => esc(f.split('/').pop())).join(', ')}</dd>` : ''}
+      ${n.mtime ? `<dt>Изменён</dt><dd>${ago(n.mtime)}</dd>` : ''}
+    </dl>
+    ${Object.entries(groups).map(([t, items]) => `<h4>${t} · ${items.length}</h4><ul>${items.join('')}</ul>`).join('') || '<h4>Связей нет</h4>'}`;
+  box.classList.add('open');
 }
 
-/* ---------- раскладка и отрисовка связей ---------- */
+$('info').addEventListener('click', (ev) => {
+  const go = ev.target.closest('[data-go]');
+  if (go) focusNode(go.dataset.go);
+  else if (ev.target.closest('.close')) select(null);
+});
+$('recentList').addEventListener('click', (ev) => {
+  const go = ev.target.closest('[data-go]');
+  if (go) focusNode(go.dataset.go);
+});
+$('home').onclick = () => { select(null); fitCamera.last = null; fitCamera(false); };
 
-// Столбцы по глубине связей: источник слева, потребители правее
-function autoLayout(ctx, p) {
-  const depth = Object.fromEntries(p.services.map(s => [s.id, 0]));
-  for (let i = 0; i < p.services.length; i++) {
-    for (const l of p.links) {
-      if (l.from in depth && l.to in depth) depth[l.to] = Math.max(depth[l.to], depth[l.from] + 1);
+const ray = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let downAt = null;
+function pick(ev) {
+  if (!view) return null;
+  const r = renderer.domElement.getBoundingClientRect();
+  pointer.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(pointer, camera);
+  const hit = ray.intersectObjects([...view.nodes.values()].map((v) => v.mesh))[0];
+  return hit?.object.userData.id || null;
+}
+renderer.domElement.addEventListener('pointermove', (ev) => {
+  const id = pick(ev);
+  renderer.domElement.style.cursor = id ? 'pointer' : '';
+  if (id !== hovered) { hovered = id; applyHighlight(); }
+});
+renderer.domElement.addEventListener('pointerdown', (ev) => { downAt = [ev.clientX, ev.clientY]; });
+renderer.domElement.addEventListener('pointerup', (ev) => {
+  if (!downAt || Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]) > 5) return;
+  select(pick(ev));
+});
+addEventListener('keydown', (ev) => { if (ev.key === 'Escape') select(null); });
+
+/* ---------- недавние изменения ---------- */
+
+function updateRecent() {
+  if (!view) return;
+  const now = Date.now();
+  const list = [...view.nodes.values()].filter((v) => v.n.mtime && now - v.n.mtime < RECENT_MS).sort((a, b) => b.n.mtime - a.n.mtime);
+  for (const v of view.nodes.values()) {
+    const recent = list.includes(v);
+    v.label.element.classList.toggle('recent', recent);
+    if (recent && !v.ring) {
+      v.ring = new THREE.Mesh(new THREE.RingGeometry(1.3, 1.55, 32), new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+      v.ring.rotation.x = -Math.PI / 2;
+      v.ring.position.copy(v.base).setY(v.base.y + 0.06);
+      world.add(v.ring);
+    } else if (!recent && v.ring) {
+      world.remove(v.ring); v.ring.geometry.dispose(); v.ring.material.dispose(); v.ring = null;
     }
+    v.mesh.material.emissive.setHex(recent ? 0x5a4a00 : 0x000000);
   }
-  const cols = [];
-  p.services.forEach(s => (cols[depth[s.id]] ||= []).push(s.id));
-  const W = ctx.canvas.clientWidth;
-  const n = cols.length;
-  const stacked = n > 1 && W < n * CARD_W + (n - 1) * 60 + 2 * PAD;
-  const gapX = n > 1 ? Math.min(220, Math.max(60, (W - 2 * PAD - n * CARD_W) / (n - 1))) : 0;
-  const out = {};
-  let stackY = PAD;
-  cols.forEach((ids, c) => {
-    let y = PAD + (stacked ? 0 : c % 2 ? 30 : 0);
-    ids.forEach(id => {
-      const h = ctx.nodes.get(id).offsetHeight;
-      if (stacked) { out[id] = { x: Math.max(0, (W - CARD_W) / 2), y: stackY }; stackY += h + 50; }
-      else { out[id] = { x: PAD + c * (CARD_W + gapX), y }; y += h + 40; }
-    });
-  });
-  return out;
+  $('recentList').innerHTML = list.length
+    ? list.slice(0, 30).map((v) => `<li><button data-go="${esc(v.n.id)}"><span class="sw" style="background:${hex((KINDS[v.n.kind] || KINDS.module).color)}"></span><span class="name">${esc(v.n.label)}</span><span class="ago">${ago(v.n.mtime)}</span></button></li>`).join('')
+    : '<li class="empty">за последние 15 минут ничего</li>';
 }
 
-function ensurePositions(ctx, p) {
-  let auto = null;
-  for (const s of p.services) {
-    if (ctx.pos.has(s.id)) continue;
-    const saved = layout[`${ctx.name}/${s.id}`];
-    if (saved) { ctx.pos.set(s.id, saved); continue; }
-    auto ||= autoLayout(ctx, p);
-    ctx.pos.set(s.id, auto[s.id]);
+/* ---------- статус сервисов ---------- */
+
+function applyStatus() {
+  if (!view) return;
+  const p = status[current];
+  for (const [id, pl] of view.platforms) {
+    const s = p?.services.find((x) => x.id === id);
+    const state = !s ? '' : s.up ? 'up' : 'down';
+    pl.outline.material.color.setHex(state === 'up' ? 0x3ecf7d : state === 'down' ? 0xf0605d : 0x6b7587);
+    pl.label.element.className = 'svc ' + state;
+    pl.label.element.querySelector('.state').textContent = !s ? '' : s.up ? '· работает' : '· не запущен';
   }
 }
 
-function anchors(a, b) {
-  if (b.x >= a.x + a.w + 30) return { x1: a.x + a.w, y1: a.y + a.h / 2, x2: b.x, y2: b.y + b.h / 2, horiz: true, dir: 1 };
-  if (b.x + b.w <= a.x - 30) return { x1: a.x, y1: a.y + a.h / 2, x2: b.x + b.w, y2: b.y + b.h / 2, horiz: true, dir: -1 };
-  const down = b.y >= a.y;
-  return { x1: a.x + a.w / 2, y1: down ? a.y + a.h : a.y, x2: b.x + b.w / 2, y2: down ? b.y : b.y + b.h, horiz: false, dir: down ? 1 : -1 };
-}
-
-function scheduleDraw(ctx) {
-  if (ctx.frame) return;
-  ctx.frame = requestAnimationFrame(() => { ctx.frame = 0; draw(ctx); });
-}
-
-function draw(ctx) {
-  const W = ctx.canvas.clientWidth;
-  let bottom = 0;
-  const rects = new Map();
-  for (const [id, node] of ctx.nodes) {
-    const p = ctx.pos.get(id);
-    const w = node.offsetWidth, h = node.offsetHeight;
-    const x = Math.min(Math.max(0, W - w), Math.max(0, p.x));
-    node.style.left = x + 'px';
-    node.style.top = p.y + 'px';
-    rects.set(id, { x, y: p.y, w, h });
-    bottom = Math.max(bottom, p.y + h);
-  }
-  ctx.canvas.style.height = Math.max(340, bottom + PAD) + 'px';
-
-  for (const l of ctx.links) {
-    const e = ctx.edges.get(`${l.from}>${l.to}`);
-    const a = rects.get(l.from), b = rects.get(l.to);
-    if (!e || !a || !b) continue;
-    const { x1, y1, x2, y2, horiz, dir } = anchors(a, b);
-    const k = Math.max(40, (horiz ? Math.abs(x2 - x1) : Math.abs(y2 - y1)) / 2) * dir;
-    const [c1x, c1y, c2x, c2y] = horiz ? [x1 + k, y1, x2 - k, y2] : [x1, y1 + k, x2, y2 - k];
-    e.path.setAttribute('d', `M${x1},${y1} C${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`);
-    e.label.style.left = (x1 + 3 * c1x + 3 * c2x + x2) / 8 + 'px';
-    e.label.style.top = (y1 + 3 * c1y + 3 * c2y + y2) / 8 + 'px';
-  }
-}
-
-/* ---------- обновление данных ---------- */
-
-function updateProject(ctx, p) {
-  const allUp = p.services.every(s => s.up) && p.links.every(l => l.up);
-  const anyUp = p.services.some(s => s.up);
-  ctx.badge.className = 'badge ' + (allUp ? 'up' : anyUp ? '' : 'down');
-  ctx.badge.textContent = allUp ? 'всё работает' : anyUp ? 'частично' : 'остановлен';
-  ctx.links = p.links;
-
-  const ids = new Set(p.services.map(s => s.id));
-  for (const [id, node] of ctx.nodes) {
-    if (!ids.has(id)) { node.remove(); ctx.nodes.delete(id); ctx.pos.delete(id); }
-  }
-  p.services.forEach(s => {
-    fillService(ctx.nodes.get(s.id) || makeNode(ctx, s.id), s);
-    note(`${p.name}/${s.id}`, s.up);
-  });
-
-  const keys = new Set(p.links.map(l => `${l.from}>${l.to}`));
-  for (const [key, e] of ctx.edges) {
-    if (!keys.has(key)) { e.path.remove(); e.label.remove(); ctx.edges.delete(key); }
-  }
-  p.links.forEach(l => {
-    const key = `${l.from}>${l.to}`;
-    let e = ctx.edges.get(key);
-    if (!e) {
-      e = { path: document.createElementNS(SVG_NS, 'path'), label: el('div') };
-      ctx.svg.append(e.path);
-      ctx.canvas.append(e.label);
-      ctx.edges.set(key, e);
-    }
-    const state = l.up ? 'up' : 'down';
-    e.path.setAttribute('class', 'edge ' + state);
-    e.path.setAttribute('marker-end', `url(#arrow-${state})`);
-    e.label.className = 'edge-label ' + state;
-    e.label.textContent = `${l.label} · ${linkText(l, p.services)}`;
-    note(`${p.name}: ${l.from}→${l.to}`, l.up);
-  });
-
-  ensurePositions(ctx, p);
-  draw(ctx);
-}
-
-async function check() {
-  let st;
+async function pollStatus() {
   try {
-    st = await (await fetch('/api/status', { cache: 'no-store' })).json();
+    const st = await (await fetch('/api/status', { cache: 'no-store' })).json();
+    status = Object.fromEntries(st.projects.map((p) => [p.name, p]));
+    applyStatus();
+  } catch { /* vizor перезапускается */ }
+}
+
+/* ---------- данные архитектуры ---------- */
+
+function renderTabs() {
+  $('tabs').innerHTML = data.projects.map((p) => `<button data-p="${esc(p.name)}" aria-pressed="${p.name === current}">${esc(p.name)}</button>`).join('');
+}
+$('tabs').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-p]');
+  if (!b || b.dataset.p === current) return;
+  current = b.dataset.p;
+  save(current);
+  location.hash = encodeURIComponent(current);
+  signature = '';
+  selected = hovered = null;
+  select(null);
+  show();
+});
+
+function show() {
+  renderTabs();
+  const p = data.projects.find((x) => x.name === current);
+  if (!p) return;
+  // структура меняется → перестроить сцену; меняется только время правки → обновить подсветку
+  const sig = current + JSON.stringify([p.services, p.links, p.nodes.map((n) => n.id), p.edges.map((e) => e.from + '>' + e.to + e.kind)]);
+  if (sig !== signature) {
+    signature = sig;
+    const keep = selected;
+    build(p);
+    if (keep && view.nodes.has(keep)) select(keep); else select(null);
+  } else {
+    for (const n of p.nodes) { const v = view.nodes.get(n.id); if (v) v.n = n; }
+  }
+  updateRecent();
+  applyStatus();
+  applyHighlight();
+}
+
+async function pollArchitecture() {
+  try {
+    data = await (await fetch('/api/architecture', { cache: 'no-store' })).json();
   } catch {
     $('updated').textContent = 'vizor недоступен';
     return;
   }
-  const box = $('projects');
-  if (!st.projects.length) {
-    ctxs.clear();
-    box.replaceChildren(el('p', 'empty', 'Проекты не найдены: добавьте vizor.json в корень проекта.'));
-  } else {
-    if (!ctxs.size) box.replaceChildren();
-    const names = new Set(st.projects.map(p => p.name));
-    for (const [name, ctx] of ctxs) {
-      if (!names.has(name)) { ctx.sec.remove(); ctxs.delete(name); }
+  $('msg').textContent = data.projects.length ? '' : 'Проекты не найдены: добавьте vizor.json в корень проекта.';
+  const fromHash = decodeURIComponent(location.hash.slice(1));
+  const names = data.projects.map((p) => p.name);
+  if (!names.includes(current)) current = [fromHash, loadSaved()].find((n) => names.includes(n)) || names[0];
+  if (current) show();
+  $('updated').textContent = 'обновлено ' + new Date(data.builtAt).toLocaleTimeString();
+}
+
+/* ---------- цикл отрисовки ---------- */
+
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  if (flight) {
+    flight.t = Math.min(1, flight.t + dt * 1.4);
+    const k = 1 - Math.pow(1 - flight.t, 3);
+    controls.target.lerpVectors(flight.fromT, flight.toT, k);
+    camera.position.lerpVectors(flight.fromP, flight.toP, k);
+    if (flight.t >= 1) flight = null;
+  }
+  controls.update();
+  if (view) {
+    for (const p of view.particles) {
+      p.t = (p.t + dt * 0.25) % 1;
+      p.dot.position.copy(p.curve.getPoint(p.t));
     }
-    for (const p of st.projects) {
-      let ctx = ctxs.get(p.name);
-      if (!ctx) { ctx = buildProject(p.name); ctxs.set(p.name, ctx); box.append(ctx.sec); }
-      updateProject(ctx, p);
+    const pulse = (Math.sin(performance.now() / 300) + 1) / 2;
+    for (const v of view.nodes.values()) {
+      if (v.ring) { v.ring.scale.setScalar(1 + pulse * 0.35); v.ring.material.opacity = 0.9 - pulse * 0.6; }
+      // дальние подписи прячем, чтобы не было каши из текста
+      const far = camera.position.distanceTo(v.base) > 55;
+      v.label.visible = !far || v.n.id === hovered || v.n.id === selected || !!v.ring;
     }
   }
-  $('updated').textContent = new Date(st.checkedAt).toLocaleTimeString();
-}
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+});
 
-function schedule() {
-  clearInterval(timer);
-  timer = setInterval(check, Math.max(1, Number($('interval').value) || 5) * 1000);
-}
-
-$('refresh').onclick = check;
-$('interval').onchange = schedule;
-$('reset').onclick = () => {
-  layout = {};
-  saveLayout();
-  ctxs.forEach(ctx => ctx.pos.clear());
-  check();
-};
-window.addEventListener('resize', () => ctxs.forEach(scheduleDraw));
-check(); schedule();
+pollArchitecture();
+pollStatus();
+setInterval(pollArchitecture, 4000);
+setInterval(pollStatus, 5000);
+setInterval(updateRecent, 30000);
 </script>
 </body>
 </html>

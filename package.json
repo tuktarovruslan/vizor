@@ -6,5 +6,8 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
   }
 }
