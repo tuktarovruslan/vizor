@@ -120,7 +120,12 @@ export async function buildArchitecture(project) {
     layer: layerOf(s.type),
     dir: normalize(s.dir || '.').replace(/^\.$/, ''),
     units: (s.architecture?.units || []).map(globToRegex),
+    // architecture.layers: слой по подпапке сервиса, например { "web": "frontend", "api": "backend" } у монолита
+    layers: Object.entries(s.architecture?.layers || {})
+      .map(([dir, type]) => [normalize(dir).replace(/\/$/, ''), layerOf(type)])
+      .sort((a, b) => b[0].length - a[0].length),
   }));
+  const layerIn = (svc, local) => svc.layers.find(([dir]) => local === dir || local.startsWith(dir + '/'))?.[1] || svc.layer;
   const codeServices = services.filter((s) => s.layer !== 'db').sort((a, b) => b.dir.length - a.dir.length);
 
   // Файл принадлежит сервису с самой длинной подходящей папкой
@@ -155,12 +160,13 @@ export async function buildArchitecture(project) {
     if (!n) {
       const isUnit = u.id !== file;
       const local = u.svc.dir ? u.id.slice(u.svc.dir.length + 1) : u.id;
+      const layer = layerIn(u.svc, local);
       n = {
         id: u.id,
         service: u.svc.id,
-        layer: u.svc.layer,
+        layer,
         label: path.posix.basename(u.id),
-        kind: isUnit ? 'unit' : kindOf(u.id, u.svc.layer),
+        kind: isUnit ? 'unit' : kindOf(u.id, layer),
         path: u.id,
         cluster: path.posix.dirname(local) === '.' ? '' : path.posix.dirname(local),
         files: [],
@@ -295,7 +301,7 @@ export async function buildArchitecture(project) {
 
   return {
     name: project.name,
-    services: services.map(({ units, dir, ...s }) => ({ ...s, dir: dir || '.' })),
+    services: services.map(({ units, layers, dir, ...s }) => ({ ...s, dir: dir || '.' })),
     links: project.links.map((l) => ({ from: l.from, to: l.to, label: l.label || null })),
     nodes: [...nodes.values()],
     edges: edgeList,
