@@ -373,7 +373,7 @@ function build(project) {
   disposeWorld();
   world = new THREE.Group();
   scene.add(world);
-  view = { nodes: new Map(), edges: [], platforms: [], clusters: [], particles: [], hidden: 0 };
+  view = { nodes: new Map(), edges: [], platforms: [], clusters: [], floors: [], particles: [], hidden: 0 };
 
   const floors = FLOORS.filter((f) => shown.has(f.key));
   const offSvc = hiddenSvc();
@@ -406,17 +406,19 @@ function build(project) {
     g.position.y = fp.y;
     if (mode === '2d') g.rotation.x = Math.PI / 2;
     world.add(g);
-    buildFloor(g, fp, span);
+    const floor = buildFloor(g, fp, span);
     let x = -fp.width / 2;
     for (const p of fp.list) {
       const cx = x + p.L.width / 2;
       x += p.L.width + 6;
-      buildPlatform(g, fp.f, p.s, p.L, cx);
+      buildPlatform(g, floor, p.s, p.L, cx);
     }
+    view.floors.push(floor);
   }
   world.updateMatrixWorld(true);
   for (const v of view.nodes.values()) placeNode(v);
-  for (const pl of view.platforms) pl.center = pl.group.localToWorld(pl.localCenter.clone());
+  // рамки сразу по фактическим местам блоков (с учётом сохранённых перетаскиваний)
+  for (const floor of view.floors) fitFrames(floor);
 
   buildEdges(project, visible);
 }
@@ -424,20 +426,18 @@ function build(project) {
 function buildFloor(g, fp, span) {
   const f = fp.f;
   const plane = new THREE.Mesh(
-    new THREE.PlaneGeometry(span, fp.depth),
+    new THREE.PlaneGeometry(1, 1),
     new THREE.MeshBasicMaterial({ color: f.color, transparent: true, opacity: fp.list.length ? 0.06 : 0.025, side: THREE.DoubleSide, depthWrite: false }),
   );
   plane.rotation.x = -Math.PI / 2;
-  plane.position.y = -0.3;
   g.add(plane);
   const border = new THREE.LineSegments(new THREE.EdgesGeometry(plane.geometry), new THREE.LineBasicMaterial({ color: f.color, transparent: true, opacity: 0.4 }));
   border.rotation.x = -Math.PI / 2;
-  border.position.y = -0.3;
   g.add(border);
   const fl = label('floor' + (fp.list.length ? '' : ' empty'), `<span style="color:${hex(f.color)}">${f.title}</span><small>${fp.list.length ? f.sub : fp.offOnly ? 'сервисы этого слоя скрыты' : 'в этом проекте нет'}</small>`);
-  fl.position.set(-span / 2 - 1, 0, mode === '3d' ? 0 : -fp.depth / 2 + 3);
   fl.center.set(1, mode === '3d' ? 0.5 : 0);
   g.add(fl);
+  const floor = { key: f.key, g, plane, border, label: fl, base: rect(-span / 2, span / 2, -fp.depth / 2, fp.depth / 2), plats: [] };
   // под «ФРОНТЕНД» — ссылки на фронтенды выбранных сервисов, под «БЭКЕНД / API» — на их Swagger
   const links = f.key === 'frontend'
     ? fp.list.filter((p) => /^https?:\/\//.test(p.s.url || '')).map(({ s }) => ({ id: s.id, url: s.url, note: s.url.replace(/^https?:\/\//, '') }))
@@ -446,18 +446,17 @@ function buildFloor(g, fp, span) {
     fl.element.insertAdjacentHTML('beforeend', '<div class="sites">' + links.map((l) =>
       `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer" title="Открыть ${esc(l.url)}">${esc(l.id)} <small>${esc(l.note)} ↗</small></a>`).join('') + '</div>');
   }
+  return floor;
 }
 
-function buildPlatform(g, f, s, L, cx) {
+function buildPlatform(g, floor, s, L, cx) {
+  const f = FLOORS.find((x) => x.key === floor.key) || floor;
   const w = L.width + 3, d = L.depth + 3;
-  const slab = new THREE.Mesh(new THREE.BoxGeometry(w, 0.4, d), new THREE.MeshStandardMaterial({ color: 0x1b2230, transparent: true, opacity: 0.85, roughness: 0.9 }));
-  slab.position.set(cx, -0.2, 0);
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(1, 0.4, 1), new THREE.MeshStandardMaterial({ color: 0x1b2230, transparent: true, opacity: 0.85, roughness: 0.9 }));
   g.add(slab);
   const outline = new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry), new THREE.LineBasicMaterial({ color: 0x6b7587 }));
-  outline.position.copy(slab.position);
   g.add(outline);
   const sl = label('svc', `<span class="dot"></span>${esc(s.id)} <span class="st">${esc(s.stack || '')}</span><span class="st state"></span>`);
-  sl.position.set(cx, 0.2, -d / 2 - 0.5);
   sl.center.set(0.5, mode === '3d' ? 1 : 0);
   g.add(sl);
   if (!L.boxes.length) {
@@ -465,21 +464,25 @@ function buildPlatform(g, f, s, L, cx) {
     empty.position.set(cx, 0.05, 0);
     g.add(empty);
   }
-  view.platforms.push({ service: s.id, floor: f.key, outline, label: sl, group: g, localCenter: new THREE.Vector3(cx, 0, 0) });
+  const pl = { service: s.id, floor: f.key, outline, slab, label: sl, group: g, localCenter: new THREE.Vector3(cx, 0, 0),
+               base: rect(cx - w / 2, cx + w / 2, -d / 2, d / 2), clusters: [] };
+  view.platforms.push(pl);
+  floor.plats.push(pl);
 
-  // подписи папок
+  // плитки и подписи папок; размер плитки задаёт fitFrames по блокам внутри
   for (const b of L.boxes) {
+    const cr = { ids: b.list.map((n) => n.id), base: rect(cx + b.cx, cx + b.cx + b.w, b.cz, b.cz + b.d), tile: null, label: null, view: null };
+    pl.clusters.push(cr);
     if (!b.name && L.boxes.length === 1) continue;
-    const tile = new THREE.Mesh(new THREE.PlaneGeometry(b.w + 0.6, b.d + 0.4), new THREE.MeshBasicMaterial({ color: 0x2a3446, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide }));
-    tile.rotation.x = -Math.PI / 2;
-    tile.position.set(cx + b.cx + b.w / 2, 0.02, b.cz + b.d / 2);
-    g.add(tile);
+    cr.tile = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0x2a3446, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide }));
+    cr.tile.rotation.x = -Math.PI / 2;
+    g.add(cr.tile);
     // длинный путь укорачиваем до двух последних папок: «components/sphere/buttons» → «sphere/buttons»
-    const cl = label('cl', esc(b.name ? b.name.split('/').slice(-2).join('/') : 'основные файлы'));
-    cl.position.set(cx + b.cx + 0.2, 0.05, b.cz + 0.7);
-    cl.center.set(0, 0.5);
-    g.add(cl);
-    view.clusters.push({ label: cl, w: b.w });
+    cr.label = label('cl', esc(b.name ? b.name.split('/').slice(-2).join('/') : 'основные файлы'));
+    cr.label.center.set(0, 0.5);
+    g.add(cr.label);
+    cr.view = { label: cr.label, w: b.w };
+    view.clusters.push(cr.view);
   }
 
   for (const n of L.boxes.flatMap((b) => b.list)) {
@@ -498,9 +501,52 @@ function buildPlatform(g, f, s, L, cx) {
     lb.position.set(0, mode === '3d' ? -h / 2 : 0, mode === '3d' ? 0 : 1.1);
     lb.center.set(0.5, 0);
     mesh.add(lb);
-    view.nodes.set(n.id, { n, floor: f.key, mesh, label: lb, group: g, auto: [cx + p.x, p.z],
+    view.nodes.set(n.id, { n, floor: f.key, mesh, label: lb, group: g, auto: [cx + p.x, p.z], frame: floor,
       localBase: new THREE.Vector3(x, 0, z), localTop: new THREE.Vector3(x, h, z), ring: null, out: [], in: [] });
   }
+}
+
+/* ---------- рамки по содержимому ---------- */
+
+// прямоугольник в плоскости этажа (локальные x и z группы этажа)
+const rect = (x0, x1, z0, z1) => ({ x0, x1, z0, z1 });
+const union = (a, b) => (b ? rect(Math.min(a.x0, b.x0), Math.max(a.x1, b.x1), Math.min(a.z0, b.z0), Math.max(a.z1, b.z1)) : a);
+const grow = (r, m) => rect(r.x0 - m, r.x1 + m, r.z0 - m, r.z1 + m);
+
+// Рамки этажа подстраиваются под блоки: плитка папки ⊇ её блоки, платформа ⊇ её папки, этаж ⊇ платформы.
+// Меньше исходного размера рамка не становится — вернули блок, и она сжимается обратно.
+function fitFrames(floor) {
+  let fr = floor.base;
+  for (const pl of floor.plats) {
+    let pr = pl.base;
+    for (const cr of pl.clusters) {
+      let r = cr.base;
+      for (const id of cr.ids) {
+        const b = view.nodes.get(id)?.localBase;
+        if (b) r = union(r, rect(b.x - CELL / 2, b.x + CELL / 2, b.z - CELL / 2 - 1.6, b.z + CELL / 2));
+      }
+      if (cr.tile) {
+        cr.tile.position.set((r.x0 + r.x1) / 2, 0.02, (r.z0 + r.z1) / 2);
+        cr.tile.scale.set(r.x1 - r.x0 + 0.6, r.z1 - r.z0 + 0.4, 1);
+        cr.label.position.set(r.x0 + 0.2, 0.05, r.z0 + 0.7);
+        cr.view.w = r.x1 - r.x0;
+      }
+      pr = union(pr, grow(r, 1.5));
+    }
+    for (const o of [pl.slab, pl.outline]) {
+      o.position.set((pr.x0 + pr.x1) / 2, -0.2, (pr.z0 + pr.z1) / 2);
+      o.scale.set(pr.x1 - pr.x0, 1, pr.z1 - pr.z0);
+    }
+    pl.label.position.set((pr.x0 + pr.x1) / 2, 0.2, pr.z0 - 0.5);
+    pl.localCenter.set((pr.x0 + pr.x1) / 2, 0, (pr.z0 + pr.z1) / 2);
+    pl.center = pl.group.localToWorld(pl.localCenter.clone());
+    fr = union(fr, grow(pr, 3));
+  }
+  for (const o of [floor.plane, floor.border]) {
+    o.position.set((fr.x0 + fr.x1) / 2, -0.3, (fr.z0 + fr.z1) / 2);
+    o.scale.set(fr.x1 - fr.x0, fr.z1 - fr.z0, 1);
+  }
+  floor.label.position.set(fr.x0 - 1, 0, mode === '3d' ? (fr.z0 + fr.z1) / 2 : fr.z0 + 3);
 }
 
 // мировые точки узла: основание (для камеры и колец) и точка крепления связей
@@ -834,7 +880,8 @@ function moveDragged(ev) {
   v.localBase.z = v.localTop.z = v.mesh.position.z = local.z;
   for (const ring of [v.ring, v.docRing]) if (ring) ring.position.set(local.x, ring.position.y, local.z);
   placeNode(v);
-  for (const rec of view.edges) if (rec.a === v || rec.b === v) refreshEdge(rec);
+  fitFrames(v.frame);
+  for (const rec of view.edges) if (rec.a === v || rec.b === v || rec.e.kind === 'service') refreshEdge(rec);
 }
 
 function endDrag() {
