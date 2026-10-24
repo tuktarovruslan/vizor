@@ -221,6 +221,8 @@ export async function buildArchitecture(project) {
     type: s.type || 'service',
     stack: s.stack || null,
     url: s.url || null,
+    command: s.command || null,
+    health: s.health || null,
     layer: layerOf(s.type),
     dir: normalize(s.dir || '.').replace(/^\.$/, ''),
     units: (s.architecture?.units || []).map(globToRegex),

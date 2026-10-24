@@ -106,6 +106,18 @@
   .card-head .close:hover { color: var(--text); }
   .card-body { padding: 10px 16px 14px; max-height: min(62vh, 640px); overflow: auto; overscroll-behavior: contain; }
   .card-node { width: 340px; }
+  .card-service { width: 340px; }
+  .card .facts { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+  .card .svc-state { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-weight: 600; }
+  .card .svc-state .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .card .svc-state.up .dot { background: var(--ok); } .card .svc-state.down .dot { background: var(--bad); }
+  .card .svc-state.down { color: var(--bad); }
+  .card ul.floors li, .card-service ul li { display: flex; gap: 8px; align-items: center; padding: 2px 0; font-size: 13px; }
+  .card ul.floors .rel { margin-left: auto; }
+  .card ul.routes .method { margin-top: 0; margin-right: 4px; }
+  .card ul.routes code { font: 12px ui-monospace, Consolas, monospace; }
+  .card .recent-note { color: var(--recent); margin-top: 4px; }
+  .svc.open { border-color: var(--accent); }
   .card-node .card-head { background: rgba(255, 255, 255, .03); }
   #toast { position: fixed; left: 50%; top: 110px; transform: translateX(-50%); padding: 8px 14px; font-size: 13px; z-index: 20;
            opacity: 0; transition: opacity .3s; pointer-events: none; }
@@ -641,7 +653,8 @@ function buildPlatform(g, floor, s, L, cx) {
   g.add(slab);
   const outline = new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry), new THREE.LineBasicMaterial({ color: 0x6b7587 }));
   g.add(outline);
-  const sl = label('svc', `<span class="dot"></span>${esc(s.id)} <span class="st">${esc(s.stack || '')}</span><span class="st state"></span>`);
+  const sl = label('svc', `<span class="dot"></span>${esc(s.id)}`);
+  sl.element.title = s.id;
   sl.center.set(0.5, mode === '3d' ? 1 : 0);
   g.add(sl);
   if (!L.boxes.length) {
@@ -1150,7 +1163,7 @@ function applyHighlight() {
   const openEdges = new Set(), keep = new Set();
   for (const c of cards.values()) {
     if (!c.target) continue;
-    if (c.type === 'edge') { openEdges.add(c.target); keep.add(c.target.e.from).add(c.target.e.to); } else keep.add(c.id);
+    if (c.type === 'edge') { openEdges.add(c.target); keep.add(c.target.e.from).add(c.target.e.to); } else if (c.type === 'node') keep.add(c.id);
   }
   hoveredEdge = hoveredCard?.type === 'edge' ? hoveredCard.target : hoveredEdgeOnScene;
   const hoverNode = hovered || (hoveredCard?.type === 'node' ? hoveredCard.id : null);
@@ -1170,6 +1183,7 @@ function applyHighlight() {
     if (r.hit) { setEdgeHot(r, r === hoveredEdge || openEdges.has(r)); setEdgeGlow(r, openEdges.has(r)); }
   }
   for (const p of view.particles) fadeTo(p.dot.material, edgeOn(p.rec) ? 1 : 0);
+  for (const pl of view.platforms) paintPlatform(pl);
 }
 
 function ago(ms) {
@@ -1304,7 +1318,17 @@ scene.add(cardLines);
 let cardZ = 1, fitDistance = 100, hoveredCard = null, cardDrag = null;
 const edgeKey = (r) => r.e.from + '>' + r.e.to;
 const apiEdge = (key) => view?.edges.find((r) => r.hit && edgeKey(r) === key) || null;
-const targetOf = (type, id) => (type === 'edge' ? apiEdge(id) : view?.nodes.get(id) || null);
+// цель карточки сервиса — { s: сервис, pl: платформа на слое at }; скрыт слой — берётся любая видимая платформа сервиса
+function serviceTarget(id, at) {
+  const s = data?.projects.find((p) => p.name === current)?.services.find((x) => x.id === id);
+  const pls = view?.platforms.filter((p) => p.service === id) || [];
+  const pl = pls.find((p) => p.floor === at) || pls[0];
+  return s && pl ? { s, pl } : null;
+}
+const targetOf = (type, id, at) => (type === 'edge' ? apiEdge(id) : type === 'service' ? serviceTarget(id, at) : view?.nodes.get(id) || null);
+const STATUS_COLOR = { up: 0x3ecf7d, down: 0xf0605d, none: 0x9aa3b2 };
+const svcStatus = (id) => status[current]?.services.find((x) => x.id === id);
+const svcColor = (id) => { const st = svcStatus(id); return !st || st.up === null ? STATUS_COLOR.none : st.up ? STATUS_COLOR.up : STATUS_COLOR.down; };
 const CARD_TYPE = {
   edge: { many: 'связей', title: (r) => r.e.label || r.b.n.label, html: (r) => cardHtml(r), color: () => EDGES.api.color,
           sig: (r) => JSON.stringify([r.e, r.b.n.api]), anchor: (r) => r.curve.getPoint(0.5) },
@@ -1312,10 +1336,66 @@ const CARD_TYPE = {
           // «изменён N мин назад» устаревает — раз в минуту карточка перерисовывается
           sig: (v) => JSON.stringify([v.n, v.out.map((e) => [e.to, e.kind, e.label]), v.in.map((e) => [e.from, e.kind, e.label]), Math.floor(Date.now() / 60000)]),
           anchor: (v) => v.anchor.clone() },
+  service: { many: 'сервисов', title: (t) => t.s.id, html: (t) => serviceHtml(t), color: (t) => svcColor(t.s.id),
+             // состояние и время ответа меняются при каждом опросе статуса, блоки — при перестройке схемы
+             sig: (t) => JSON.stringify([t.s, t.pl.floor, svcStatus(t.s.id), serviceStats(t.s.id).sig, Math.floor(Date.now() / 60000)]),
+             anchor: (t) => t.pl.group.localToWorld(t.pl.localCenter.clone()) },
 };
 
+// что известно о сервисе по схеме: блоки по слоям, адреса API, связи с другими сервисами, недавние правки
+function serviceStats(id) {
+  const p = data.projects.find((x) => x.name === current);
+  const svcOf = new Map(p.nodes.map((n) => [n.id, n.service]));
+  const mine = p.nodes.filter((n) => n.service === id);
+  const perFloor = FLOORS.map((f) => ({ f, n: mine.filter((n) => floorOf(n) === f.key).length })).filter((x) => x.n);
+  const routes = mine.filter((n) => n.kind === 'route').sort((a, b) => a.label.localeCompare(b.label));
+  const out = new Map(), inc = new Map();
+  for (const e of p.edges) {
+    const a = svcOf.get(e.from), b = svcOf.get(e.to);
+    if (!a || !b || a === b) continue;
+    if (a === id) out.set(b, (out.get(b) || 0) + 1);
+    if (b === id) inc.set(a, (inc.get(a) || 0) + 1);
+  }
+  for (const l of p.links) {
+    if (l.from === id && l.to !== id && !out.has(l.to)) out.set(l.to, 0);
+    if (l.to === id && l.from !== id && !inc.has(l.from)) inc.set(l.from, 0);
+  }
+  const recent = mine.filter((n) => n.mtime && Date.now() - n.mtime < RECENT_MS).length;
+  return { mine, perFloor, routes, out, inc, recent, sig: [mine.length, routes.map((r) => r.id + (r.api || []).map((a) => a.method).join()), [...out], [...inc], recent].join('|') };
+}
+
+const fmtUptime = (sec) => (sec < 60 ? `${Math.round(sec)} с` : sec < 3600 ? `${Math.round(sec / 60)} мин` : sec < 86400 ? `${Math.round(sec / 3600)} ч` : `${Math.round(sec / 86400)} дн`);
+
+function serviceHtml(t) {
+  const s = t.s, st = svcStatus(s.id), x = serviceStats(s.id);
+  const stateCls = !st || st.up === null ? '' : st.up ? 'up' : 'down';
+  const facts = [
+    st ? `<span class="svc-state ${stateCls}"><span class="dot"></span>${svcStateText(st)}</span>` : '<span class="svc-state">статус ещё не получен</span>',
+    st?.up && st.ms != null ? `ответ ${st.ms} мс` : '',
+    st?.up && st.uptime ? `работает ${fmtUptime(st.uptime)}` : '',
+  ].filter(Boolean).join(' · ');
+  const link = (url, text) => `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(text)} ↗</a>`;
+  const rel = (map, arrow) => [...map].map(([other, n]) => `<li><span class="sw" style="background:${hex(svcColor(other))};border-radius:50%"></span>${arrow} ${esc(other)} <span class="rel">${n ? n + ' ' + (n === 1 ? 'связь' : n < 5 ? 'связи' : 'связей') : 'по vizor.json'}</span></li>`).join('');
+  return `
+    <p class="facts">${facts}</p>
+    <dl>
+      <dt>Тип</dt><dd>${esc(s.type)}</dd>
+      ${s.stack ? `<dt>Стек</dt><dd>${esc(s.stack)}</dd>` : ''}
+      ${s.url ? `<dt>Адрес</dt><dd>${/^https?:/.test(s.url) ? link(s.url, s.url.replace(/^https?:\/\//, '')) : esc(s.url)}</dd>` : '<dt>Адрес</dt><dd class="rel">не задан — сервис «пока пустой»</dd>'}
+      ${s.health ? `<dt>Проверка</dt><dd><code>${esc(s.health)}</code></dd>` : ''}
+      ${s.command ? `<dt>Запуск</dt><dd><code>${esc(s.command)}</code></dd>` : ''}
+      <dt>Папка</dt><dd><code>${esc(s.dir)}</code></dd>
+      ${s.swagger ? `<dt>API</dt><dd>${link(s.swagger, 'Swagger')}</dd>` : ''}
+    </dl>
+    <h4>Блоки по слоям · ${x.mine.length}</h4>
+    <ul class="floors">${x.perFloor.map(({ f, n }) => `<li><span class="sw" style="background:${hex(f.color)}"></span>${f.short}<span class="rel">${n}</span></li>`).join('') || '<li class="rel">блоков нет</li>'}</ul>
+    ${x.recent ? `<p class="rel recent-note">изменено за 15 минут: ${x.recent}</p>` : ''}
+    ${x.routes.length ? `<h4>Адреса API · ${x.routes.length}</h4><ul class="routes">${x.routes.map((r) => `<li><button data-go="${esc(r.id)}">${(r.api || []).map((a) => `<span class="method m-${a.method.toLowerCase()}">${a.method}</span>`).join('')}<code>${esc(r.label)}</code></button></li>`).join('')}</ul>` : ''}
+    ${x.out.size || x.inc.size ? `<h4>Связи с сервисами</h4><ul>${rel(x.out, '→')}${rel(x.inc, '←')}</ul>` : ''}`;
+}
+
 function saveCards() {
-  savedCards[current] = [...cards.values()].map((c) => ({ type: c.type, id: c.id, off: c.off, size: c.size }));
+  savedCards[current] = [...cards.values()].map((c) => ({ type: c.type, id: c.id, off: c.off, size: c.size, ...(c.at ? { at: c.at } : {}) }));
   savePref('cards', savedCards);
   $('closeCards').hidden = !cards.size;
   $('closeCards').textContent = `Закрыть детали (${cards.size})`;
@@ -1340,7 +1420,7 @@ function renderCard(c) {
   body.scrollTop = top;
 }
 
-// номера — по порядку открытия, отдельно у карточек связей и у карточек блоков
+// номера — по порядку открытия, отдельно у карточек связей, блоков и сервисов
 function numberCards() {
   for (const type of Object.keys(CARD_TYPE)) {
     [...cards.values()].filter((c) => c.type === type).forEach((c, i) => { c.el.querySelector('.no').textContent = i + 1; });
@@ -1349,7 +1429,7 @@ function numberCards() {
 
 function raiseCard(c) { c.el.style.zIndex = ++cardZ; }
 
-function createCard(type, id, off = {}, size = 1) {
+function createCard(type, id, off = {}, size = 1, at = null) {
   const key = type + ':' + id;
   const el = document.createElement('div');
   el.className = 'card card-' + type;
@@ -1364,7 +1444,7 @@ function createCard(type, id, off = {}, size = 1) {
     new THREE.LineBasicMaterial({ color: EDGES.api.color, transparent: true, opacity: 0.55 }));
   line.frustumCulled = false;
   cardLines.add(line);
-  const c = { key, type, id, el, target: null, off, size, line, sig: '' };
+  const c = { key, type, id, at, el, target: null, off, size, line, sig: '' };
   const range = el.querySelector('.size input'), shown = el.querySelector('.size output');
   const setSize = (v) => { c.size = Number(v); range.value = c.size; shown.textContent = Math.round(c.size * 100) + '%'; };
   setSize(size);
@@ -1408,10 +1488,17 @@ function closeCard(key) {
   applyHighlight();
 }
 
-// клик по связи или блоку: открыть карточку; уже открытую — поднять и мигнуть; шестая того же типа закрывает самую раннюю
+// клик по связи, блоку или сервису: открыть карточку; уже открытую — поднять и мигнуть; шестая того же типа закрывает самую раннюю.
+// Карточка сервиса одна на сервис; клик по его платформе на другом слое переносит её туда.
 function openCard(type, target) {
-  const id = type === 'edge' ? edgeKey(target) : target.n.id;
+  const id = type === 'edge' ? edgeKey(target) : type === 'service' ? target.s.id : target.n.id;
   let c = cards.get(type + ':' + id);
+  if (c && type === 'service' && c.at !== target.pl.floor) {
+    c.at = target.pl.floor;
+    c.target = target;
+    c.off = {};   // новая привязка — место рядом с ней подбирается заново
+    saveCards();
+  }
   if (!c) {
     const same = [...cards.values()].filter((x) => x.type === type);
     if (same.length >= MAX_CARDS) {
@@ -1419,7 +1506,7 @@ function openCard(type, target) {
       toast(`Открыто не больше ${MAX_CARDS} карточек ${CARD_TYPE[type].many} — закрыл самую раннюю: ${oldest.target ? CARD_TYPE[type].title(oldest.target) : oldest.id}`);
       closeCard(oldest.key);
     }
-    c = createCard(type, id);
+    c = createCard(type, id, {}, 1, type === 'service' ? target.pl.floor : null);
     c.target = target;
     renderCard(c);
     numberCards();
@@ -1433,7 +1520,7 @@ function openCard(type, target) {
 // после перестройки схемы карточки находят свою связь или блок заново; скрыт слоем — карточка прячется до его возвращения
 function bindCards() {
   for (const c of cards.values()) {
-    c.target = targetOf(c.type, c.id);
+    c.target = targetOf(c.type, c.id, c.at);
     if (c.target) renderCard(c);
   }
 }
@@ -1442,7 +1529,7 @@ function restoreCards() {
   for (const key of [...cards.keys()]) { const c = cards.get(key); c.el.remove(); cardLines.remove(c.line); cards.delete(key); }
   // старый формат { key, off } — карточки связей
   const saved = (savedCards[current] || []).map((s) => (s.type ? s : { type: 'edge', id: s.key, off: s.off }));
-  for (const type of Object.keys(CARD_TYPE)) for (const s of saved.filter((x) => x.type === type).slice(-MAX_CARDS)) createCard(type, s.id, s.off || {}, s.size || 1);
+  for (const type of Object.keys(CARD_TYPE)) for (const s of saved.filter((x) => x.type === type).slice(-MAX_CARDS)) createCard(type, s.id, s.off || {}, s.size || 1, s.at || null);
   bindCards();
   numberCards();
   saveCards();
@@ -1579,7 +1666,7 @@ function updateCards() {
       pos.needsUpdate = true;
       c.line.visible = true;
     }
-    c.el.classList.toggle('hl', c.type === 'edge' ? hoveredEdge === c.target : hovered === c.id);
+    c.el.classList.toggle('hl', c.type === 'edge' ? hoveredEdge === c.target : c.type === 'service' ? hoverGroup?.pl === c.target.pl : hovered === c.id);
   }
 }
 $('closeCards').onclick = () => { for (const key of [...cards.keys()]) closeCard(key); };
@@ -1639,6 +1726,16 @@ function groupMembers(g) {
   return ids.map((id) => view.nodes.get(id)).filter(Boolean);
 }
 
+// платформа светлее, когда под курсором или когда у сервиса открыта карточка, привязанная к ней
+function paintPlatform(pl, hover = hoverGroup?.type === 'platform' && hoverGroup.pl === pl) {
+  const c = cards.get('service:' + pl.service);
+  const on = hover || (!!c && c.target?.pl === pl);
+  fadeColorTo(pl.slab.material, on ? 0x3a5684 : 0x1b2230);
+  fadeTo(pl.slab.material, on ? 0.95 : 0.85);
+  pl.label.element.classList.toggle('grab-hl', hover);
+  pl.label.element.classList.toggle('open', !!c && c.target?.pl === pl);
+}
+
 // подсветка группы под курсором: плитка, платформа или плоскость слоя светлее, подпись выделена
 let hoverGroup = null;
 const sameGroup = (a, b) => a === b || (!!a && !!b && a.type === b.type && (a.cr || a.pl || a.floor) === (b.cr || b.pl || b.floor));
@@ -1651,9 +1748,7 @@ function setHoverGroup(g) {
       fadeTo(x.cr.tile.material, on ? 0.85 : 0.55);
       x.cr.label?.element.classList.toggle('grab-hl', on);
     } else if (x.type === 'platform') {
-      fadeColorTo(x.pl.slab.material, on ? 0x3a5684 : 0x1b2230);
-      fadeTo(x.pl.slab.material, on ? 0.95 : 0.85);
-      x.pl.label.element.classList.toggle('grab-hl', on);
+      paintPlatform(x.pl, on);
     } else {
       fadeTo(x.floor.plane.material, on ? 0.16 : x.floor.plane.userData.planeOpacity);
       fadeTo(x.floor.border.material, on ? 0.9 : 0.4);
@@ -1687,7 +1782,7 @@ function startGroupDrag(ev, g) {
   const hit = planeHit(ev, new THREE.Vector3());
   if (!hit) return;
   ev.preventDefault();
-  ev.stopPropagation();
+  if (g.type === 'floor') ev.stopPropagation();
   const members = groupMembers(g);
   drag = { group: g, frame, members, start: members.map((u) => [u.raw.x, u.raw.z]), base0: frame.base,
            from: frame.g.worldToLocal(hit), x0: ev.clientX, y0: ev.clientY, moving: false };
@@ -1788,6 +1883,14 @@ renderer.domElement.addEventListener('pointerup', (ev) => {
   if (!downAt || Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]) > 5) return;
   const id = pick(ev);
   const edge = id ? null : pickEdge();
+  const pl = id || edge ? null : pickGroup()?.pl;
+  if (pl) {
+    // повторный клик по той же платформе закрывает карточку сервиса, по другой его платформе — переносит её туда
+    const c = cards.get('service:' + pl.service);
+    const s = data.projects.find((p) => p.name === current).services.find((x) => x.id === pl.service);
+    if (c && c.target?.pl === pl) closeCard(c.key); else if (s) openCard('service', { s, pl });
+    return;
+  }
   // повторный клик по элементу с открытой карточкой закрывает её
   const key = edge ? 'edge:' + edgeKey(edge) : id ? 'node:' + id : null;
   if (key && cards.has(key)) closeCard(key);
@@ -1884,10 +1987,15 @@ function applyStatus() {
     const s = p?.services.find((x) => x.id === pl.service);
     const state = !s || s.up === null ? '' : s.up ? 'up' : 'down';
     pl.outline.material.color.setHex(state === 'up' ? 0x3ecf7d : state === 'down' ? 0xf0605d : 0x6b7587);
-    pl.label.element.className = 'svc ' + state;
-    pl.label.element.querySelector('.state').textContent = !s ? '' : s.up === null ? '· пока пустой' : s.up ? '· работает' : '· не запущен';
+    // классы — переключателями: className целиком стёр бы подсветку плашки при наведении
+    pl.label.element.classList.toggle('up', state === 'up');
+    pl.label.element.classList.toggle('down', state === 'down');
+    pl.label.element.title = pl.service + (s ? ' · ' + svcStateText(s) : '');
   }
+  for (const c of cards.values()) if (c.type === 'service' && c.target) renderCard(c);
 }
+
+const svcStateText = (s) => (s.up === null ? 'пока пустой' : s.up ? 'работает' : 'не запущен');
 
 async function pollStatus() {
   try {
