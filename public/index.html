@@ -261,7 +261,7 @@
 </button>
 <aside id="settings" class="panel" hidden aria-label="Настройки">
   <h2>Настройки</h2>
-  <p class="sub">Чувствительность колеса мыши: меньше — медленнее, больше — быстрее</p>
+  <p class="sub">Чувствительность колеса мыши и клавиш: меньше — медленнее, больше — быстрее</p>
   <div id="settingsRows"></div>
   <h3>Вращение слоя</h3>
   <p class="sub">ЛКМ на названии слоя. Обычно колесо на себя вращает вокруг X и Z против часовой стрелки, вокруг Y — по часовой (если смотреть с конца оси)</p>
@@ -406,6 +406,7 @@ const SETTINGS = [
   { key: 'zoom', label: 'Приближение', hint: 'Ctrl + колесо', max: 5 },
   { key: 'panX', label: 'Сдвиг по горизонтали', hint: 'Shift + колесо', max: 3 },
   { key: 'panY', label: 'Сдвиг по вертикали', hint: 'колесо', max: 3 },
+  { key: 'move', label: 'Движение камеры', hint: 'W A S D, пробел, C', max: 3 },
 ];
 const SETTING_DEFAULT = 1;
 // инверсия направления вращения зажатого слоя по осям; по умолчанию выключена
@@ -414,7 +415,7 @@ const INVERTS = [
   { key: 'invZ', label: 'Инвертировать вокруг оси Z', hint: 'Shift + колесо' },
   { key: 'invY', label: 'Инвертировать вокруг оси Y', hint: 'Alt + колесо' },
 ];
-const settings = { zoom: 1, panX: 1, panY: 1, invX: false, invZ: false, invY: false, ...loadPref('settings', {}) };
+const settings = { zoom: 1, panX: 1, panY: 1, move: 1, invX: false, invZ: false, invY: false, ...loadPref('settings', {}) };
 const isDefault = () => SETTINGS.every((s) => settings[s.key] === SETTING_DEFAULT) && INVERTS.every((s) => !settings[s.key]);
 function applySettings() {
   controls.zoomSpeed = settings.zoom;
@@ -1232,8 +1233,8 @@ function applyControls() {
     ? { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
     : { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   $('hint').textContent = mode === '3d'
-    ? 'Тяните мышью — вращать, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору, правая кнопка — сдвинуть. Блок, папку и сервис можно перетащить, слой — за его название; зажав название слоя: колесо — поворот вокруг X, Shift + колесо — вокруг Z, Alt + колесо — вокруг Y, W/S — от себя/к себе, A/D — влево/вправо, пробел/C — выше/ниже. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.'
-    : 'Тяните мышью — сдвинуть, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору. Блок, папку и сервис можно перетащить, слой — за его название; зажав название слоя: колесо — поворот вокруг X, Shift + колесо — вокруг Z, Alt + колесо — вокруг Y, W/S — от себя/к себе, A/D — влево/вправо, пробел/C — выше/ниже. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.';
+    ? 'Тяните мышью — вращать, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору, правая кнопка — сдвинуть, W/A/S/D — вперёд/влево/назад/вправо, пробел/C — вверх/вниз. Блок, папку и сервис можно перетащить, слой — за его название; зажав название слоя: колесо — поворот вокруг X, Shift + колесо — вокруг Z, Alt + колесо — вокруг Y, W/S — от себя/к себе, A/D — влево/вправо, пробел/C — выше/ниже. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.'
+    : 'Тяните мышью — сдвинуть, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору, W/S — к схеме/от схемы, A/D — влево/вправо, пробел/C — вверх/вниз. Блок, папку и сервис можно перетащить, слой — за его название; зажав название слоя: колесо — поворот вокруг X, Shift + колесо — вокруг Z, Alt + колесо — вокруг Y, W/S — от себя/к себе, A/D — влево/вправо, пробел/C — выше/ниже. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.';
 }
 
 function fitCamera() {
@@ -2126,8 +2127,9 @@ addEventListener('wheel', (ev) => {
 // Alt, пока слой зажат, не отдаём браузеру: на Windows отпускание Alt переводит фокус на меню окна
 addEventListener('keyup', (ev) => { if (heldFloor() && ev.key === 'Alt') ev.preventDefault(); });
 
-// направления «от себя» и «вправо» — по горизонтали относительно камеры; клавиши — по физическому положению (любая раскладка)
-function floorMoveDir(code) {
+// направления «от себя» и «вправо» — по горизонтали относительно камеры, «вверх» — по вертикали сцены;
+// клавиши — по физическому положению (любая раскладка). Общие для движения зажатого слоя и камеры
+function moveDir(code) {
   const forward = camera.getWorldDirection(new THREE.Vector3()).setY(0);
   if (forward.lengthSq() < 1e-6) forward.set(0, 0, -1);   // камера смотрит строго вниз
   forward.normalize();
@@ -2138,11 +2140,40 @@ function floorMoveDir(code) {
 addEventListener('keydown', (ev) => {
   const f = heldFloor();
   if (f && ev.key === 'Alt') { ev.preventDefault(); return; }
-  const dir = f && floorMoveDir(ev.code);
+  const dir = f && moveDir(ev.code);
   if (!dir) return;
   ev.preventDefault();   // пробел иначе прокрутил бы страницу или нажал кнопку в фокусе
   transformFloor(f, (t) => ({ shift: t.shift.clone().addScaledVector(dir, FLOOR_MOVE_STEP) }));
 });
+
+// Движение зрителя: W / S — вперёд / назад (по горизонтали, куда смотрит камера; в 2D — к схеме и от неё),
+// A / D — влево / вправо, пробел / C — вверх / вниз. Пока клавиша зажата, камера плавно едет в цикле отрисовки;
+// скорость — доля расстояния до точки взгляда в секунду (вблизи медленнее, издалека быстрее), множитель — в настройках.
+// Пока зажат слой, эти клавиши двигают его, а не камеру. Сочетания с Ctrl, Alt, Cmd (Ctrl + C) и ввод в полях не трогаем.
+const CAM_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyC']);
+const CAM_SPEED = 0.45;
+const camKeys = new Set();
+const typing = (el) => !!el?.closest?.('input, textarea, select, [contenteditable="true"]');
+addEventListener('keydown', (ev) => {
+  if (!CAM_KEYS.has(ev.code) || heldFloor() || ev.ctrlKey || ev.metaKey || ev.altKey || typing(ev.target)) return;
+  ev.preventDefault();   // пробел иначе прокрутил бы страницу
+  camKeys.add(ev.code);
+});
+addEventListener('keyup', (ev) => {
+  if (camKeys.delete(ev.code)) ev.preventDefault();   // пробел на отпускании нажал бы кнопку в фокусе
+});
+addEventListener('blur', () => camKeys.clear());   // окно потеряло фокус — отпускания клавиш уже не придут
+function moveCamera(dt) {
+  if (!camKeys.size || heldFloor()) return;
+  const v = new THREE.Vector3();
+  for (const code of camKeys) v.add(moveDir(code));
+  if (v.lengthSq() < 1e-6) return;   // W и S вместе гасят друг друга
+  flight = null;
+  const dist = camera.position.distanceTo(controls.target);
+  v.normalize().multiplyScalar(dist * CAM_SPEED * settings.move * dt);
+  camera.position.add(v);
+  controls.target.add(v);
+}
 
 $('resetLayout').onclick = () => {
   delete offsets[current];
@@ -2397,7 +2428,8 @@ async function pollArchitecture() {
 const clock = new THREE.Clock();
 const tmp = new THREE.Vector3();
 renderer.setAnimationLoop(() => {
-  const dt = clock.getDelta();
+  const dt = Math.min(clock.getDelta(), 0.1);   // после паузы вкладки — без рывка
+  moveCamera(dt);
   stepFades(performance.now());
   if (flight) {
     flight.t = Math.min(1, flight.t + dt * 1.4);
