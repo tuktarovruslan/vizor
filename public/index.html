@@ -1916,10 +1916,38 @@ function planeHit(ev, out) {
   ray.setFromCamera(pointer, camera);
   return ray.ray.intersectPlane(dragPlane, out);
 }
-// начать перетаскивание группы: точка захвата — на плоскости её этажа
+// Слой за название тащится целиком, как жёсткое тело, в абсолютной системе отсчёта — независимо от его поворота:
+// в 3D по горизонтали сцены, в 2D в плоскости экрана. Это тот же сдвиг tf.shift, что у клавиш WASD; раскладка внутри
+// слоя не меняется. Плоскость захвата проходит через текущий центр слоя.
+function setFloorDragPlane(frame) {
+  frame.g.updateMatrixWorld(true);
+  const r = frame.rect || frame.defaultBase;
+  const center = frame.g.localToWorld(new THREE.Vector3((r.x0 + r.x1) / 2, 0, (r.z0 + r.z1) / 2));
+  dragPlane.setFromNormalAndCoplanarPoint(mode === '3d' ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1), center);
+}
+function saveFloorTf(f) {
+  (offsets[current] ||= {})['floorT:' + f.key] = [...f.tf.rot.toArray(), ...f.tf.shift.toArray()];
+  savePref('offsets', offsets);
+  $('resetLayout').disabled = false;
+}
+
+// начать перетаскивание группы: папка и сервис — по плоскости своего этажа, слой — в абсолютной системе отсчёта
 function startGroupDrag(ev, g) {
   if (ev.button !== 0 || !view) return;
   const frame = g.floor;
+  if (g.type === 'floor') {
+    setFloorDragPlane(frame);
+    const hit = planeHit(ev, new THREE.Vector3());
+    if (!hit) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    drag = { group: g, frame, members: [], floorMove: true, fromWorld: hit, shift0: frame.tf.shift.clone(),
+             x0: ev.clientX, y0: ev.clientY, lx: ev.clientX, ly: ev.clientY, moving: false };
+    setHoverGroup(g);
+    controls.enabled = false;
+    ev.target.setPointerCapture?.(ev.pointerId);
+    return;
+  }
   const normal = new THREE.Vector3(0, 1, 0).applyQuaternion(frame.g.getWorldQuaternion(tmpQ));
   dragPlane.setFromNormalAndCoplanarPoint(normal, frame.g.localToWorld(new THREE.Vector3()));
   const hit = planeHit(ev, new THREE.Vector3());
@@ -1961,11 +1989,16 @@ function moveDragged(ev) {
   if (drag.group?.type === 'floor') drag.frame.label.element.classList.add('dragging');
   const hit = planeHit(ev, new THREE.Vector3());
   if (!hit) return;
+  if (drag.floorMove) {
+    drag.frame.tf.shift.copy(drag.shift0).add(hit.sub(drag.fromWorld));
+    placeFloor(drag.frame);
+    refreshFloors(new Set([drag.frame]));
+    return;
+  }
   if (drag.group) {
-    // группа: все её блоки сдвигаются на одно и то же смещение; у слоя вместе с ними едет и его рамка
+    // папка или сервис: все их блоки сдвигаются на одно и то же смещение в плоскости этажа
     const d = drag.frame.g.worldToLocal(hit).sub(drag.from);
     drag.members.forEach((u, i) => { u.raw.x = drag.start[i][0] + d.x; u.raw.z = drag.start[i][1] + d.z; });
-    if (drag.group.type === 'floor') drag.frame.base = moveRect(drag.base0, [d.x, d.z]);
   } else {
     const local = drag.v.group.worldToLocal(hit.sub(drag.grab));
     drag.v.raw.x = local.x;
@@ -1986,7 +2019,8 @@ function endDrag() {
   document.body.style.cursor = '';
   frame.label.element.classList.remove('dragging');
   if (!moving) return;
-  // запоминаем места всех блоков этажа, которые сдвинулись (и тащимые, и отъехавшие соседи); у слоя — ещё сдвиг рамки
+  if (group?.type === 'floor') { saveFloorTf(frame); return; }
+  // запоминаем места всех блоков этажа, которые сдвинулись (и тащимые, и отъехавшие соседи)
   const saved = (offsets[current] ||= {});
   const dragged = new Set(members);
   for (const u of view.nodes.values()) {
@@ -1996,7 +2030,6 @@ function endDrag() {
     u.raw.x = u.localBase.x;
     u.raw.z = u.localBase.z;
   }
-  if (group?.type === 'floor') saved['floor:' + frame.key] = [frame.base.x0 - frame.defaultBase.x0, frame.base.z0 - frame.defaultBase.z0];
   fitFrames(frame);
   savePref('offsets', offsets);
   $('resetLayout').disabled = false;
@@ -2027,14 +2060,18 @@ function transformFloor(f, change) {
   Object.assign(f.tf, change(f.tf));
   placeFloor(f);
   refreshFloors(new Set([f]));
-  (offsets[current] ||= {})['floorT:' + f.key] = [...f.tf.rot.toArray(), ...f.tf.shift.toArray()];
-  savePref('offsets', offsets);
-  $('resetLayout').disabled = false;
+  saveFloorTf(f);
   rebaseDrag();
 }
 // слой повернулся или поднялся под курсором — перетаскивание продолжается от нового положения без скачка
 function rebaseDrag() {
   const { frame } = drag;
+  if (drag.floorMove) {
+    setFloorDragPlane(frame);
+    const hit = planeHit({ clientX: drag.lx, clientY: drag.ly }, new THREE.Vector3());
+    if (hit) { drag.fromWorld = hit; drag.shift0 = frame.tf.shift.clone(); }
+    return;
+  }
   frame.g.updateMatrixWorld(true);
   dragPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0).applyQuaternion(frame.g.getWorldQuaternion(tmpQ)), frame.g.localToWorld(new THREE.Vector3()));
   const hit = planeHit({ clientX: drag.lx, clientY: drag.ly }, new THREE.Vector3());
