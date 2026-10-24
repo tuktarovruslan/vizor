@@ -117,7 +117,6 @@
   .card ul.routes .method { margin-top: 0; margin-right: 4px; }
   .card ul.routes code { font: 12px ui-monospace, Consolas, monospace; }
   .card .recent-note { color: var(--recent); margin-top: 4px; }
-  .svc.open { border-color: var(--accent); }
   .card-node .card-head { background: rgba(255, 255, 255, .03); }
   #toast { position: fixed; left: 50%; top: 110px; transform: translateX(-50%); padding: 8px 14px; font-size: 13px; z-index: 20;
            opacity: 0; transition: opacity .3s; pointer-events: none; }
@@ -162,11 +161,6 @@
   .lbl.recent { color: var(--recent); font-weight: 600; }
   .lbl.hl { color: #fff; font-weight: 600; font-size: 12px; }
   .cl { overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: #9fb0c9; white-space: nowrap; text-shadow: 0 1px 3px #000; letter-spacing: .03em; transition: color .3s ease; }
-  .svc { font-size: 14px; font-weight: 600; white-space: nowrap; padding: 3px 10px; border-radius: 8px; background: rgba(13,16,22,.8);
-         border: 1px solid var(--border); display: flex; gap: 8px; align-items: center; transition: border-color .3s ease, box-shadow .3s ease; }
-  .svc .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
-  .svc.up .dot { background: var(--ok); } .svc.down .dot { background: var(--bad); }
-  .svc .st { font-weight: 400; color: var(--muted); font-size: 12px; }
   .floor { font-size: 20px; font-weight: 700; letter-spacing: .08em; white-space: nowrap; opacity: .85; text-shadow: 0 2px 6px #000; text-align: right; }
   .floor small { display: block; font-size: 12px; font-weight: 400; letter-spacing: 0; color: var(--muted); }
   /* под «ФРОНТЕНД» — ссылки на видимые фронтенды */
@@ -181,8 +175,7 @@
   .floor .ttl { pointer-events: auto; cursor: grab; border-radius: 6px; padding: 0 4px; transition: background .3s ease, box-shadow .3s ease; }
   .floor .ttl:hover, .floor.grab-hl .ttl { background: rgba(255, 255, 255, .08); box-shadow: 0 0 0 1px currentColor; }
   .floor.dragging .ttl { cursor: grabbing; }
-  /* сервис и папка под курсором: подпись выделена, сама плитка подсвечена в сцене */
-  .svc.grab-hl { border-color: #9cc0ff; box-shadow: 0 0 0 1px #9cc0ff; }
+  /* папка под курсором: подпись выделена, сама плитка подсвечена в сцене */
   .cl.grab-hl { color: #fff; font-weight: 600; }
 
   #msg { position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
@@ -550,6 +543,7 @@ function disposeWorld() {
   world.traverse((o) => {
     if (o.isCSS2DObject) o.element.remove();
     if (o.geometry && o.geometry !== GLOW_PLANE && !Object.values(GEOMS).includes(o.geometry)) o.geometry.dispose();
+    if (o.material?.map && o.userData.ownMap) o.material.map.dispose();
     if (o.material) o.material.dispose();
   });
   scene.remove(world);
@@ -646,6 +640,59 @@ function buildFloor(g, fp, span) {
   return floor;
 }
 
+/* Плашка сервиса — «наклейка» на самой плите, в её левом верхнем углу: точка статуса и имя, нарисованные на canvas.
+   Лежит в плоскости платформы, поэтому движется, поворачивается и масштабируется вместе с ней.
+   Под неё у платформы сверху полоса TAG_BAND, а ширина платформы — не меньше наклейки (см. fitFrames),
+   чтобы наклейка не наезжала на папки и читалась при общем виде схемы. */
+const TAG_BAND = 4.4, TAG_H = 3.4, TAG_PX = 128;
+function makeTag(name) {
+  const cv = document.createElement('canvas');
+  const ctx = cv.getContext('2d');
+  const font = `600 ${TAG_PX * 0.56}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  // сначала мерим текст, потом задаём размер: смена размера canvas сбрасывает шрифт контекста
+  ctx.font = font;
+  const textW = ctx.measureText(name).width;
+  cv.height = TAG_PX;
+  cv.width = Math.ceil(TAG_PX * 0.8 + textW + TAG_PX * 0.35);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();   // чётче, когда плита видна под углом
+  const w = (TAG_H * cv.width) / cv.height;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, TAG_H), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.renderOrder = 4;
+  mesh.userData.ownMap = true;
+  const tag = { mesh, ctx, tex, font, name, w, state: '', hover: false, open: false, drawn: null };
+  drawTag(tag);
+  return tag;
+}
+// перерисовка — только когда меняется статус, наведение или открытая карточка
+function drawTag(tag, patch = {}) {
+  Object.assign(tag, patch);
+  const key = [tag.state, tag.hover, tag.open].join();
+  if (key === tag.drawn) return;
+  tag.drawn = key;
+  const { ctx } = tag, cv = ctx.canvas, H = cv.height;
+  const lw = H * (tag.hover || tag.open ? 0.05 : 0.025);
+  ctx.clearRect(0, 0, cv.width, H);
+  ctx.beginPath();
+  ctx.roundRect(lw / 2, lw / 2, cv.width - lw, H - lw, H * 0.28);
+  ctx.fillStyle = 'rgba(13, 16, 22, 0.88)';
+  ctx.fill();
+  ctx.lineWidth = lw;
+  ctx.strokeStyle = tag.hover ? '#9cc0ff' : tag.open ? '#4f8cff' : '#2b3240';
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(H * 0.45, H / 2, H * 0.12, 0, Math.PI * 2);
+  ctx.fillStyle = tag.state === 'up' ? '#3ecf7d' : tag.state === 'down' ? '#f0605d' : '#8b95a7';
+  ctx.fill();
+  ctx.font = tag.font;
+  ctx.fillStyle = '#e6e9ef';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(tag.name, H * 0.8, H / 2 + H * 0.03);
+  tag.tex.needsUpdate = true;
+}
+
 function buildPlatform(g, floor, s, L, cx) {
   const f = FLOORS.find((x) => x.key === floor.key) || floor;
   const w = L.width + 3, d = L.depth + 3;
@@ -653,16 +700,14 @@ function buildPlatform(g, floor, s, L, cx) {
   g.add(slab);
   const outline = new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry), new THREE.LineBasicMaterial({ color: 0x6b7587 }));
   g.add(outline);
-  const sl = label('svc', `<span class="dot"></span>${esc(s.id)}`);
-  sl.element.title = s.id;
-  sl.center.set(0.5, mode === '3d' ? 1 : 0);
-  g.add(sl);
+  const tag = makeTag(s.id);
+  g.add(tag.mesh);
   if (!L.boxes.length) {
     const empty = label('cl', 'пока пустой');
     empty.position.set(cx, 0.05, 0);
     g.add(empty);
   }
-  const pl = { service: s.id, floor: f.key, frame: floor, outline, slab, label: sl, group: g, localCenter: new THREE.Vector3(cx, 0, 0),
+  const pl = { service: s.id, floor: f.key, frame: floor, outline, slab, tag, group: g, localCenter: new THREE.Vector3(cx, 0, 0),
                base: rect(cx - w / 2, cx + w / 2, -d / 2, d / 2), clusters: [] };
   slab.userData.group = { type: 'platform', pl, floor };
   view.platforms.push(pl);
@@ -766,7 +811,9 @@ function fitFrames(floor, anchorId = null) {
     // платформа ⊇ её папки с отступом 1.5, не меньше исходного размера; пустая — как была
     let pr = null;
     for (const r of placed) pr = union(grow(r, 1.5), pr);
-    pl.rawRect = pr ? rect(pr.x0, Math.max(pr.x1, pr.x0 + (pl.base.x1 - pl.base.x0)), pr.z0, Math.max(pr.z1, pr.z0 + (pl.base.z1 - pl.base.z0))) : pl.base;
+    if (pr) pr = rect(pr.x0, Math.max(pr.x1, pr.x0 + pl.tag.w + 1), pr.z0 - TAG_BAND, pr.z1);
+    pl.rawRect = pr ? rect(pr.x0, Math.max(pr.x1, pr.x0 + (pl.base.x1 - pl.base.x0)), pr.z0, Math.max(pr.z1, pr.z0 + (pl.base.z1 - pl.base.z0)))
+      : rect(pl.base.x0, Math.max(pl.base.x1, pl.base.x0 + pl.tag.w + 1), pl.base.z0, pl.base.z1);
     platRects.push(pl.rawRect);
   }
   // 2. платформы внутри этажа
@@ -805,7 +852,10 @@ function fitFrames(floor, anchorId = null) {
       o.position.set((pr.x0 + pr.x1) / 2, -0.2, (pr.z0 + pr.z1) / 2);
       o.scale.set(pr.x1 - pr.x0, 1, pr.z1 - pr.z0);
     }
-    pl.label.position.set((pr.x0 + pr.x1) / 2, 0.2, pr.z0 - 0.5);
+    // наклейка не шире платформы: у узкой — уменьшается целиком
+    const fit = Math.min(1, (pr.x1 - pr.x0 - 1) / pl.tag.w);
+    pl.tag.mesh.scale.set(fit, fit, 1);
+    pl.tag.mesh.position.set(pr.x0 + 0.5 + (pl.tag.w * fit) / 2, 0.04, pr.z0 + 0.5 + (TAG_H * fit) / 2);
     pl.localCenter.set((pr.x0 + pr.x1) / 2, 0, (pr.z0 + pr.z1) / 2);
     pl.center = pl.group.localToWorld(pl.localCenter.clone());
     fr = union(fr, grow(pr, 3));
@@ -1732,8 +1782,7 @@ function paintPlatform(pl, hover = hoverGroup?.type === 'platform' && hoverGroup
   const on = hover || (!!c && c.target?.pl === pl);
   fadeColorTo(pl.slab.material, on ? 0x3a5684 : 0x1b2230);
   fadeTo(pl.slab.material, on ? 0.95 : 0.85);
-  pl.label.element.classList.toggle('grab-hl', hover);
-  pl.label.element.classList.toggle('open', !!c && c.target?.pl === pl);
+  drawTag(pl.tag, { hover, open: !!c && c.target?.pl === pl });
 }
 
 // подсветка группы под курсором: плитка, платформа или плоскость слоя светлее, подпись выделена
@@ -1987,10 +2036,7 @@ function applyStatus() {
     const s = p?.services.find((x) => x.id === pl.service);
     const state = !s || s.up === null ? '' : s.up ? 'up' : 'down';
     pl.outline.material.color.setHex(state === 'up' ? 0x3ecf7d : state === 'down' ? 0xf0605d : 0x6b7587);
-    // классы — переключателями: className целиком стёр бы подсветку плашки при наведении
-    pl.label.element.classList.toggle('up', state === 'up');
-    pl.label.element.classList.toggle('down', state === 'down');
-    pl.label.element.title = pl.service + (s ? ' · ' + svcStateText(s) : '');
+    drawTag(pl.tag, { state });
   }
   for (const c of cards.values()) if (c.type === 'service' && c.target) renderCard(c);
 }
