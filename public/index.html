@@ -199,6 +199,17 @@
   #settings .row output { font: 12px ui-monospace, Consolas, monospace; color: var(--text); min-width: 40px; text-align: right; }
   #settings .row input { grid-column: 1 / -1; width: 100%; margin: 4px 0 0; accent-color: var(--accent); cursor: pointer; }
   #settings .row small { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
+  #settings h3 { font-size: 12px; margin: 14px 0 6px; padding-top: 12px; border-top: 1px solid var(--border); color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  #settings .inv { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; cursor: pointer; }
+  #settings .inv .txt { flex: 1; }
+  #settings .inv small { display: block; color: var(--muted); font-size: 11px; }
+  /* переключатель: скрытый checkbox + дорожка с бегунком */
+  #settings .inv input { position: absolute; opacity: 0; pointer-events: none; }
+  #settings .inv .sw-track { width: 34px; height: 20px; border-radius: 10px; background: var(--border); position: relative; flex: none; transition: background .3s ease; }
+  #settings .inv .sw-track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--text); transition: transform .3s ease; }
+  #settings .inv input:checked + .sw-track { background: var(--accent); }
+  #settings .inv input:checked + .sw-track::after { transform: translateX(14px); }
+  #settings .inv input:focus-visible + .sw-track { outline: 2px solid var(--accent); outline-offset: 2px; }
   #settings .foot { display: flex; justify-content: flex-end; }
   #settings .row .reset { background: none; border: 1px solid var(--border); border-radius: 6px; width: 24px; height: 22px; padding: 0;
                           color: var(--muted); font-size: 13px; line-height: 1; }
@@ -252,6 +263,9 @@
   <h2>Настройки</h2>
   <p class="sub">Чувствительность колеса мыши: меньше — медленнее, больше — быстрее</p>
   <div id="settingsRows"></div>
+  <h3>Вращение слоя</h3>
+  <p class="sub">ЛКМ на названии слоя. Обычно колесо на себя вращает по часовой стрелке, от себя — против (если смотреть с конца оси)</p>
+  <div id="settingsInverts"></div>
   <div class="foot"><button id="settingsReset">По умолчанию</button></div>
 </aside>
 
@@ -394,7 +408,14 @@ const SETTINGS = [
   { key: 'panY', label: 'Сдвиг по вертикали', hint: 'колесо', max: 3 },
 ];
 const SETTING_DEFAULT = 1;
-const settings = { zoom: 1, panX: 1, panY: 1, ...loadPref('settings', {}) };
+// инверсия направления вращения зажатого слоя по осям; по умолчанию выключена
+const INVERTS = [
+  { key: 'invX', label: 'Инвертировать вокруг оси X', hint: 'колесо' },
+  { key: 'invZ', label: 'Инвертировать вокруг оси Z', hint: 'Shift + колесо' },
+  { key: 'invY', label: 'Инвертировать вокруг оси Y', hint: 'Alt + колесо' },
+];
+const settings = { zoom: 1, panX: 1, panY: 1, invX: false, invZ: false, invY: false, ...loadPref('settings', {}) };
+const isDefault = () => SETTINGS.every((s) => settings[s.key] === SETTING_DEFAULT) && INVERTS.every((s) => !settings[s.key]);
 function applySettings() {
   controls.zoomSpeed = settings.zoom;
   for (const s of SETTINGS) {
@@ -405,7 +426,8 @@ function applySettings() {
     // своя кнопка сброса у каждой настройки — доступна, только когда значение отличается от обычного
     document.querySelector(`[data-reset="${s.key}"]`).disabled = settings[s.key] === SETTING_DEFAULT;
   }
-  $('settingsReset').disabled = SETTINGS.every((s) => settings[s.key] === SETTING_DEFAULT);
+  for (const s of INVERTS) $('set-' + s.key).checked = settings[s.key];
+  $('settingsReset').disabled = isDefault();
 }
 const setSetting = (key, value) => { settings[key] = value; applySettings(); savePref('settings', settings); };
 $('settingsRows').innerHTML = SETTINGS.map((s) => `<div class="row">
@@ -413,6 +435,13 @@ $('settingsRows').innerHTML = SETTINGS.map((s) => `<div class="row">
   <button class="reset" data-reset="${s.key}" title="Вернуть ×${SETTING_DEFAULT.toFixed(1)}" aria-label="Вернуть «${s.label}» по умолчанию">↺</button>
   <input id="set-${s.key}" type="range" min="0.2" max="${s.max}" step="0.1">
   <small>${s.hint} · от ×0.2 до ×${s.max}</small></div>`).join('');
+$('settingsInverts').innerHTML = INVERTS.map((s) => `<label class="inv">
+  <span class="txt">${s.label}<small>${s.hint}</small></span>
+  <input id="set-${s.key}" type="checkbox"><span class="sw-track" aria-hidden="true"></span></label>`).join('');
+$('settingsInverts').addEventListener('change', (ev) => {
+  const s = INVERTS.find((x) => 'set-' + x.key === ev.target.id);
+  if (s) setSetting(s.key, ev.target.checked);
+});
 $('settingsRows').addEventListener('input', (ev) => {
   const s = SETTINGS.find((x) => 'set-' + x.key === ev.target.id);
   if (s) setSetting(s.key, Number(ev.target.value));
@@ -423,6 +452,7 @@ $('settingsRows').addEventListener('click', (ev) => {
 });
 $('settingsReset').onclick = () => {
   for (const s of SETTINGS) settings[s.key] = SETTING_DEFAULT;
+  for (const s of INVERTS) settings[s.key] = false;
   applySettings();
   savePref('settings', settings);
 };
@@ -2087,8 +2117,10 @@ addEventListener('wheel', (ev) => {
   ev.stopPropagation();
   const delta = ev.deltaY || ev.deltaX;   // Chrome при Shift отдаёт прокрутку в deltaX
   if (!delta) return;
-  const angle = -delta * FLOOR_ROT_PER_DELTA;
-  transformFloor(f, () => rotateFloor(f, ev.altKey ? AXIS_Y : ev.shiftKey ? AXIS_Z : AXIS_X, angle));
+  // колесо на себя (delta > 0) — по часовой стрелке, если смотреть с конца оси (отрицательный угол); инверсия — в настройках
+  const [axis, inv] = ev.altKey ? [AXIS_Y, settings.invY] : ev.shiftKey ? [AXIS_Z, settings.invZ] : [AXIS_X, settings.invX];
+  const angle = -delta * FLOOR_ROT_PER_DELTA * (inv ? -1 : 1);
+  transformFloor(f, () => rotateFloor(f, axis, angle));
 }, { capture: true, passive: false });
 // Alt, пока слой зажат, не отдаём браузеру: на Windows отпускание Alt переводит фокус на меню окна
 addEventListener('keyup', (ev) => { if (heldFloor() && ev.key === 'Alt') ev.preventDefault(); });
