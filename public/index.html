@@ -332,6 +332,26 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.screenSpacePanning = true;
 controls.maxDistance = 600;
+controls.zoomToCursor = true;   // колесо приближает к точке под курсором, а не к центру экрана
+
+// Shift + колесо — сдвиг взгляда по горизонтали экрана (камера и точка, вокруг которой она вращается, вместе).
+// Слушатель на родителе в фазе захвата срабатывает раньше OrbitControls, и колесо не приближает.
+// Chrome при зажатом Shift отдаёт прокрутку в deltaX; щелчок колеса (~100) сдвигает примерно на 8 % ширины вида.
+const PAN_PER_NOTCH = 0.08;
+$('scene').addEventListener('wheel', (ev) => {
+  if (!ev.shiftKey || ev.ctrlKey) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  const delta = ev.deltaX || ev.deltaY;
+  if (!delta) return;
+  flight = null;
+  const dist = camera.position.distanceTo(controls.target);
+  const viewWidth = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect;
+  const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+  const shift = right.multiplyScalar((delta / 100) * PAN_PER_NOTCH * viewWidth);
+  camera.position.add(shift);
+  controls.target.add(shift);
+}, { capture: true, passive: false });
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.55));
 const sun = new THREE.DirectionalLight(0xffffff, 1.1);
@@ -942,8 +962,8 @@ function applyControls() {
     ? { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
     : { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   $('hint').textContent = mode === '3d'
-    ? 'Тяните мышью — вращать, колесо — приблизить, правая кнопка — сдвинуть. Блок можно перетащить. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.'
-    : 'Тяните мышью — сдвинуть, колесо — приблизить. Блок можно перетащить. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.';
+    ? 'Тяните мышью — вращать, колесо — приблизить к курсору, Shift + колесо — сдвиг вбок, правая кнопка — сдвинуть. Блок можно перетащить. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.'
+    : 'Тяните мышью — сдвинуть, колесо — приблизить к курсору, Shift + колесо — сдвиг вбок. Блок можно перетащить. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.';
 }
 
 function fitCamera() {
