@@ -40,7 +40,7 @@
   #home, #resetLayout { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 3px 10px; }
   #resetLayout:disabled { opacity: .4; cursor: default; }
 
-  #legend { left: 12px; bottom: 12px; padding: 10px 14px; font-size: 12px; max-width: 300px; }
+  #legend { left: 62px; bottom: 12px; padding: 10px 14px; font-size: 12px; max-width: 300px; }
   #legend h2, #recent h2 { font-size: 12px; margin: 0 0 6px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
   #legend ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 12px; }
   #legend li { display: flex; align-items: center; gap: 6px; }
@@ -167,16 +167,35 @@
 
   #msg { position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
   /* значок «как читать схему» — только на узких экранах, вместо постоянной легенды */
-  #legendBtn { display: none; left: 12px; bottom: 12px; width: 42px; height: 42px; padding: 0; border-radius: 12px;
+  #legendBtn { display: none; left: 62px; bottom: 12px; width: 42px; height: 42px; padding: 0; border-radius: 12px;
                align-items: center; justify-content: center; color: var(--muted); }
   #legendBtn:hover, #legendBtn[aria-expanded="true"] { color: var(--text); border-color: var(--accent); }
+
+  /* настройки пользователя: шестерёнка в левом нижнем углу, над ней — панель с ползунками */
+  #settingsBtn { left: 12px; bottom: 12px; width: 42px; height: 42px; padding: 0; border-radius: 12px;
+                 display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+  #settingsBtn svg { transition: transform .4s ease; }
+  #settingsBtn:hover, #settingsBtn[aria-expanded="true"] { color: var(--text); border-color: var(--accent); }
+  #settingsBtn[aria-expanded="true"] svg { transform: rotate(60deg); }
+  #settings { left: 12px; bottom: 62px; width: 320px; max-width: calc(100vw - 24px); padding: 12px 16px 14px; font-size: 13px; z-index: 15; }
+  #settings[hidden] { display: none; }
+  #settings h2 { font-size: 12px; margin: 0 0 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  #settings .sub { margin: -4px 0 12px; color: var(--muted); font-size: 12px; }
+  #settings .row { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; margin-bottom: 12px; }
+  #settings .row label { font-weight: 600; }
+  #settings .row output { font: 12px ui-monospace, Consolas, monospace; color: var(--text); min-width: 40px; text-align: right; }
+  #settings .row input { grid-column: 1 / -1; width: 100%; margin: 4px 0 0; accent-color: var(--accent); cursor: pointer; }
+  #settings .row small { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
+  #settings .foot { display: flex; justify-content: flex-end; }
+  #settings .foot button { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 3px 10px; color: var(--muted); }
+  #settings .foot button:hover { color: var(--text); border-color: var(--accent); }
   @media (max-width: 760px) {
     #legendBtn { display: inline-flex; }
-    #legend { display: none; right: 12px; bottom: 62px; max-width: none; max-height: 60vh; overflow: auto; }
+    #legend { display: none; left: 12px; right: 12px; bottom: 62px; max-width: none; max-height: 60vh; overflow: auto; }
     #legend.open { display: block; }
     #legend summary { pointer-events: none; list-style: none; }
     #legend summary::-webkit-details-marker { display: none; }
-    #recent { left: 62px; width: auto; }
+    #recent { left: 112px; width: auto; }
     #recent ul { max-height: calc(25vh - 40px); }
   }
 </style>
@@ -207,6 +226,17 @@
     <button id="resetLayout" title="Вернуть перетащенные блоки этого проекта на места по умолчанию">Сбросить расположение</button>
   </span>
 </header>
+
+<button id="settingsBtn" class="panel" aria-expanded="false" aria-controls="settings" title="Настройки" aria-label="Настройки">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+</button>
+<aside id="settings" class="panel" hidden aria-label="Настройки">
+  <h2>Настройки</h2>
+  <p class="sub">Чувствительность колеса мыши: меньше — медленнее, больше — быстрее</p>
+  <div id="settingsRows"></div>
+  <div class="foot"><button id="settingsReset">По умолчанию</button></div>
+</aside>
 
 <button id="legendBtn" class="panel" aria-expanded="false" aria-controls="legend" title="Как читать схему" aria-label="Как читать схему">
   <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
@@ -339,6 +369,46 @@ controls.zoomToCursor = true;   // приближение — к точке по
 // Слушатель на родителе в фазе захвата срабатывает раньше OrbitControls. Chrome при Shift отдаёт прокрутку в deltaX;
 // тачпад прокручивает двумя пальцами сразу по обеим осям. Щелчок колеса (~100) — около 120 px экрана.
 const PAN_PX_PER_DELTA = 1.2;
+
+// Настройки пользователя (шестерёнка слева внизу): множители чувствительности колеса, хранятся в браузере
+const SETTINGS = [
+  { key: 'zoom', label: 'Приближение', hint: 'Ctrl + колесо' },
+  { key: 'panX', label: 'Сдвиг по горизонтали', hint: 'Shift + колесо' },
+  { key: 'panY', label: 'Сдвиг по вертикали', hint: 'колесо' },
+];
+const settings = { zoom: 1, panX: 1, panY: 1, ...loadPref('settings', {}) };
+function applySettings() {
+  controls.zoomSpeed = settings.zoom;
+  for (const s of SETTINGS) {
+    const input = $('set-' + s.key);
+    if (!input) continue;
+    input.value = settings[s.key];
+    document.querySelector(`output[for="set-${s.key}"]`).textContent = '×' + settings[s.key].toFixed(1);
+  }
+}
+$('settingsRows').innerHTML = SETTINGS.map((s) => `<div class="row">
+  <label for="set-${s.key}">${s.label}</label><output for="set-${s.key}"></output>
+  <input id="set-${s.key}" type="range" min="0.2" max="3" step="0.1">
+  <small>${s.hint}</small></div>`).join('');
+$('settingsRows').addEventListener('input', (ev) => {
+  const s = SETTINGS.find((x) => 'set-' + x.key === ev.target.id);
+  if (!s) return;
+  settings[s.key] = Number(ev.target.value);
+  applySettings();
+  savePref('settings', settings);
+});
+$('settingsReset').onclick = () => {
+  for (const s of SETTINGS) settings[s.key] = 1;
+  applySettings();
+  savePref('settings', settings);
+};
+function setSettingsOpen(on) {
+  $('settings').hidden = !on;
+  $('settingsBtn').setAttribute('aria-expanded', String(on));
+}
+$('settingsBtn').addEventListener('click', () => setSettingsOpen($('settings').hidden));
+addEventListener('pointerdown', (ev) => { if (!ev.target.closest('#settings, #settingsBtn')) setSettingsOpen(false); });
+applySettings();
 $('scene').addEventListener('wheel', (ev) => {
   if (ev.ctrlKey) return;
   ev.preventDefault();
@@ -352,7 +422,8 @@ $('scene').addEventListener('wheel', (ev) => {
   const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
   const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
   // колесо вниз — вид едет вниз (схема уходит вверх), как у страницы
-  const shift = right.multiplyScalar(dx * PAN_PX_PER_DELTA * unitsPerPx).addScaledVector(up, -dy * PAN_PX_PER_DELTA * unitsPerPx);
+  const shift = right.multiplyScalar(dx * PAN_PX_PER_DELTA * settings.panX * unitsPerPx)
+    .addScaledVector(up, -dy * PAN_PX_PER_DELTA * settings.panY * unitsPerPx);
   camera.position.add(shift);
   controls.target.add(shift);
 }, { capture: true, passive: false });
@@ -1396,7 +1467,7 @@ function autoPlace(c) {
   const y0 = THREE.MathUtils.clamp(toScreen(mid).y - 40, top, Math.max(top, innerHeight - 12 - h));
   // свободное место ищем колонками: от выбранной — поочерёдно влево и вправо, но только в пределах экрана
   const others = [...cards.values()].filter((o) => o !== c && o.placed).map((o) => o.el.getBoundingClientRect())
-    .concat(['legend', 'recent', 'legendBtn'].map((id) => $(id).getBoundingClientRect()).filter((r) => r.width && r.height));
+    .concat(['legend', 'recent', 'legendBtn', 'settingsBtn', 'settings'].map((id) => $(id).getBoundingClientRect()).filter((r) => r.width && r.height));
   // длинная карточка может уходить за нижний край (её тело прокручивается) — важно, чтобы было видно хотя бы MIN_SEEN
   const MIN_SEEN = 240;
   const seen = (y) => Math.min(h, innerHeight - 12 - y);
@@ -1599,7 +1670,12 @@ renderer.domElement.addEventListener('pointerup', (ev) => {
   if (key && cards.has(key)) closeCard(key);
   else if (edge) openCard('edge', edge); else if (id) openCard('node', view.nodes.get(id));
 });
-addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { setLegendOpen(false); closeTopCard(); } });
+// Esc: сначала закрывает открытую панель настроек, иначе — верхнюю карточку
+addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Escape') return;
+  setLegendOpen(false);
+  if (!$('settings').hidden) setSettingsOpen(false); else closeTopCard();
+});
 
 // «Как читать схему» по умолчанию свёрнуто; на широком экране раскрытие запоминается
 $('legendDetails').open = loadPref('legendOpen', false);
