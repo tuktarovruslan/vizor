@@ -587,10 +587,12 @@ function build(project) {
 
   for (const fp of plats) {
     const g = new THREE.Group();
-    g.position.y = fp.y;
-    if (mode === '2d') g.rotation.x = Math.PI / 2;
     world.add(g);
     const floor = buildFloor(g, fp, span);
+    floor.baseY = fp.y;
+    const [yaw = 0, tilt = 0, lift = 0] = offsets[current]?.['floorT:' + floor.key] || [];
+    floor.tf = { yaw, tilt, lift };
+    placeFloor(floor);
     let x = -fp.width / 2;
     for (const p of fp.list) {
       const cx = x + p.L.width / 2;
@@ -907,20 +909,41 @@ function restackFloors(anchor) {
   const floors = view.floors, at = floors.indexOf(anchor);
   if (at < 0) return;
   const moved = new Set();
-  const setY = (f, y) => { if (Math.abs(f.g.position.y - y) > 1e-6) { f.g.position.y = y; moved.add(f); } };
-  let top = anchor.g.position.y - anchor.rect.z0, bottom = anchor.g.position.y - anchor.rect.z1;
+  const setY = (f, y) => { if (Math.abs(f.baseY - y) > 1e-6) { f.baseY = y; placeFloor(f); moved.add(f); } };
+  let top = anchor.baseY - anchor.rect.z0, bottom = anchor.baseY - anchor.rect.z1;
   for (let i = at - 1; i >= 0; i--) {
     const f = floors[i];
     setY(f, top + FLOOR_GAP_2D + f.rect.z1);
-    top = f.g.position.y - f.rect.z0;
+    top = f.baseY - f.rect.z0;
   }
   for (let i = at + 1; i < floors.length; i++) {
     const f = floors[i];
     setY(f, bottom - FLOOR_GAP_2D + f.rect.z0);
-    bottom = f.g.position.y - f.rect.z1;
+    bottom = f.baseY - f.rect.z1;
   }
+  refreshFloors(moved);
+}
+
+/* Преобразование слоя: поворот вокруг оси, перпендикулярной его плоскости (yaw), наклон вокруг его горизонтальной
+   оси (tilt) и подъём по вертикали (lift). Вращается вокруг центра рамки по умолчанию — слой поворачивается на месте.
+   Хранится в offsets как floorT:<слой> = [yaw, tilt, lift], сбрасывается «Сбросить расположение». */
+const AXIS_X = new THREE.Vector3(1, 0, 0), AXIS_Y = new THREE.Vector3(0, 1, 0);
+function placeFloor(f) {
+  const q0 = new THREE.Quaternion();
+  if (mode === '2d') q0.setFromAxisAngle(AXIS_X, Math.PI / 2);   // в 2D слой развёрнут к зрителю
+  const q = q0.clone()
+    .multiply(new THREE.Quaternion().setFromAxisAngle(AXIS_X, f.tf.tilt))
+    .multiply(new THREE.Quaternion().setFromAxisAngle(AXIS_Y, f.tf.yaw));
+  const pivot = new THREE.Vector3((f.defaultBase.x0 + f.defaultBase.x1) / 2, 0, (f.defaultBase.z0 + f.defaultBase.z1) / 2);
+  f.g.quaternion.copy(q);
+  f.g.position.set(0, f.baseY + f.tf.lift, 0)
+    .add(pivot.clone().applyQuaternion(q0))
+    .sub(pivot.applyQuaternion(q));
+}
+
+// после сдвига или поворота слоёв: мировые точки их блоков и платформ, и связи, которые к ним ведут
+function refreshFloors(moved) {
   if (!moved.size) return;
-  // сдвинутые этажи: мировые точки их блоков и платформ, и связи, которые к ним ведут
   for (const f of moved) f.g.updateMatrixWorld(true);
   const shifted = new Set();
   for (const v of view.nodes.values()) if (moved.has(v.frame)) { placeNode(v); shifted.add(v); }
@@ -1158,8 +1181,8 @@ function applyControls() {
     ? { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
     : { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   $('hint').textContent = mode === '3d'
-    ? 'Тяните мышью — вращать, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору, правая кнопка — сдвинуть. Блок, папку и сервис можно перетащить, слой — за его название. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.'
-    : 'Тяните мышью — сдвинуть, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору. Блок, папку и сервис можно перетащить, слой — за его название. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.';
+    ? 'Тяните мышью — вращать, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору, правая кнопка — сдвинуть. Блок, папку и сервис можно перетащить, слой — за его название; зажав название слоя: колесо — поворот, Shift + колесо — наклон, пробел/C — выше/ниже. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.'
+    : 'Тяните мышью — сдвинуть, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору. Блок, папку и сервис можно перетащить, слой — за его название; зажав название слоя: колесо — поворот, Shift + колесо — наклон, пробел/C — выше/ниже. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.';
 }
 
 function fitCamera() {
@@ -1884,7 +1907,7 @@ function startGroupDrag(ev, g) {
   if (g.type === 'floor') ev.stopPropagation();
   const members = groupMembers(g);
   drag = { group: g, frame, members, start: members.map((u) => [u.raw.x, u.raw.z]), base0: frame.base,
-           from: frame.g.worldToLocal(hit), x0: ev.clientX, y0: ev.clientY, moving: false };
+           from: frame.g.worldToLocal(hit), x0: ev.clientX, y0: ev.clientY, lx: ev.clientX, ly: ev.clientY, moving: false };
   setHoverGroup(g);
   controls.enabled = false;
   ev.target.setPointerCapture?.(ev.pointerId);
@@ -1968,10 +1991,53 @@ renderer.domElement.addEventListener('pointermove', (ev) => {
   if (id !== hovered || edge !== hoveredEdgeOnScene) { hovered = id; hoveredEdgeOnScene = edge; applyHighlight(); }
 });
 // перетаскивание слушаем на всём окне: курсор может уйти на панель, а отпустить блок можно где угодно
-addEventListener('pointermove', (ev) => { if (drag) moveDragged(ev); });
+addEventListener('pointermove', (ev) => { if (drag) { drag.lx = ev.clientX; drag.ly = ev.clientY; moveDragged(ev); } });
 addEventListener('pointerup', endDrag);
 addEventListener('pointercancel', endDrag);
 addEventListener('blur', endDrag);
+// Пока слой зажат ЛКМ за название: колесо — поворот, Shift + колесо — наклон, пробел — выше, C — ниже.
+// Колесо слушаем на всём окне в фазе захвата: курсор над названием слоя, а не над сценой.
+const FLOOR_ROT_PER_DELTA = THREE.MathUtils.degToRad(0.075);   // щелчок колеса (~100) — 7.5°
+const FLOOR_LIFT_STEP = 2;
+const heldFloor = () => (drag?.group?.type === 'floor' ? drag.frame : null);
+function transformFloor(f, change) {
+  Object.assign(f.tf, change(f.tf));
+  placeFloor(f);
+  refreshFloors(new Set([f]));
+  (offsets[current] ||= {})['floorT:' + f.key] = [f.tf.yaw, f.tf.tilt, f.tf.lift];
+  savePref('offsets', offsets);
+  $('resetLayout').disabled = false;
+  rebaseDrag();
+}
+// слой повернулся или поднялся под курсором — перетаскивание продолжается от нового положения без скачка
+function rebaseDrag() {
+  const { frame } = drag;
+  frame.g.updateMatrixWorld(true);
+  dragPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0).applyQuaternion(frame.g.getWorldQuaternion(tmpQ)), frame.g.localToWorld(new THREE.Vector3()));
+  const hit = planeHit({ clientX: drag.lx, clientY: drag.ly }, new THREE.Vector3());
+  if (!hit) return;
+  drag.from = frame.g.worldToLocal(hit);
+  drag.start = drag.members.map((u) => [u.raw.x, u.raw.z]);
+  drag.base0 = frame.base;
+}
+addEventListener('wheel', (ev) => {
+  const f = heldFloor();
+  if (!f) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  const delta = ev.deltaY || ev.deltaX;   // Chrome при Shift отдаёт прокрутку в deltaX
+  if (!delta) return;
+  const angle = -delta * FLOOR_ROT_PER_DELTA;
+  transformFloor(f, (t) => (ev.shiftKey ? { tilt: t.tilt + angle } : { yaw: t.yaw + angle }));
+}, { capture: true, passive: false });
+addEventListener('keydown', (ev) => {
+  const f = heldFloor();
+  if (!f || (ev.code !== 'Space' && ev.code !== 'KeyC')) return;
+  ev.preventDefault();   // пробел иначе прокрутил бы страницу или нажал кнопку в фокусе
+  const step = ev.code === 'Space' ? FLOOR_LIFT_STEP : -FLOOR_LIFT_STEP;
+  transformFloor(f, (t) => ({ lift: t.lift + step }));
+});
+
 $('resetLayout').onclick = () => {
   delete offsets[current];
   savePref('offsets', offsets);
