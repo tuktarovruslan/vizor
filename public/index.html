@@ -165,6 +165,13 @@
   .floor .sites a small { display: inline; font-weight: 400; color: var(--muted); }
   .floor .sites a:hover { color: #9cc0ff; } .floor .sites a:hover small { color: #9cc0ff; }
   .floor.empty { opacity: .45; }
+  /* заголовок слоя — ручка: за него слой перетаскивается целиком */
+  .floor .ttl { pointer-events: auto; cursor: grab; border-radius: 6px; padding: 0 4px; transition: background .2s, box-shadow .2s; }
+  .floor .ttl:hover, .floor.grab-hl .ttl { background: rgba(255, 255, 255, .08); box-shadow: 0 0 0 1px currentColor; }
+  .floor.dragging .ttl { cursor: grabbing; }
+  /* сервис и папка под курсором: подпись выделена, сама плитка подсвечена в сцене */
+  .svc.grab-hl { border-color: #9cc0ff; box-shadow: 0 0 0 1px #9cc0ff; }
+  .cl.grab-hl { color: #fff; font-weight: 600; }
 
   #msg { position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
   /* значок «как читать схему» — только на узких экранах, вместо постоянной легенды */
@@ -605,10 +612,16 @@ function buildFloor(g, fp, span) {
   const border = new THREE.LineSegments(new THREE.EdgesGeometry(plane.geometry), new THREE.LineBasicMaterial({ color: f.color, transparent: true, opacity: 0.4 }));
   border.rotation.x = -Math.PI / 2;
   g.add(border);
-  const fl = label('floor' + (fp.list.length ? '' : ' empty'), `<span style="color:${hex(f.color)}">${f.title}</span><small>${fp.list.length ? f.sub : fp.offOnly ? 'сервисы этого слоя скрыты' : 'в этом проекте нет'}</small>`);
+  const fl = label('floor' + (fp.list.length ? '' : ' empty'), `<span class="ttl" style="color:${hex(f.color)}" title="Перетащите, чтобы сдвинуть слой целиком">${f.title}</span><small>${fp.list.length ? f.sub : fp.offOnly ? 'сервисы этого слоя скрыты' : 'в этом проекте нет'}</small>`);
   fl.center.set(1, mode === '3d' ? 0.5 : 0);
   g.add(fl);
-  const floor = { key: f.key, g, plane, border, label: fl, base: rect(-span / 2, span / 2, -fp.depth / 2, fp.depth / 2), plats: [] };
+  const defaultBase = rect(-span / 2, span / 2, -fp.depth / 2, fp.depth / 2);
+  const floor = { key: f.key, g, plane, border, label: fl, defaultBase, base: moveRect(defaultBase, offsets[current]?.['floor:' + f.key] || [0, 0]), plats: [] };
+  plane.userData.planeOpacity = plane.material.opacity;
+  const handle = fl.element.querySelector('.ttl');
+  handle.addEventListener('pointerdown', (ev) => startGroupDrag(ev, { type: 'floor', floor }));
+  handle.addEventListener('pointerenter', () => { if (!drag) setHoverGroup({ type: 'floor', floor }); });
+  handle.addEventListener('pointerleave', () => { if (!drag && hoverGroup?.floor === floor && hoverGroup.type === 'floor') setHoverGroup(null); });
   // под «ФРОНТЕНД» — ссылки на фронтенды выбранных сервисов, под «БЭКЕНД / API» — на их Swagger
   const links = f.key === 'frontend'
     ? fp.list.filter((p) => /^https?:\/\//.test(p.s.url || '')).map(({ s }) => ({ id: s.id, url: s.url, note: s.url.replace(/^https?:\/\//, '') }))
@@ -635,8 +648,9 @@ function buildPlatform(g, floor, s, L, cx) {
     empty.position.set(cx, 0.05, 0);
     g.add(empty);
   }
-  const pl = { service: s.id, floor: f.key, outline, slab, label: sl, group: g, localCenter: new THREE.Vector3(cx, 0, 0),
+  const pl = { service: s.id, floor: f.key, frame: floor, outline, slab, label: sl, group: g, localCenter: new THREE.Vector3(cx, 0, 0),
                base: rect(cx - w / 2, cx + w / 2, -d / 2, d / 2), clusters: [] };
+  slab.userData.group = { type: 'platform', pl, floor };
   view.platforms.push(pl);
   floor.plats.push(pl);
 
@@ -653,6 +667,7 @@ function buildPlatform(g, floor, s, L, cx) {
     cr.label.center.set(0, 0.5);
     g.add(cr.label);
     cr.view = { label: cr.label, w: b.w };
+    cr.tile.userData.group = { type: 'cluster', cr, pl, floor };
     view.clusters.push(cr.view);
   }
 
@@ -1049,8 +1064,8 @@ function applyControls() {
     ? { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
     : { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   $('hint').textContent = mode === '3d'
-    ? 'Тяните мышью — вращать, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору, правая кнопка — сдвинуть. Блок можно перетащить. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.'
-    : 'Тяните мышью — сдвинуть, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору. Блок можно перетащить. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.';
+    ? 'Тяните мышью — вращать, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору, правая кнопка — сдвинуть. Блок, папку и сервис можно перетащить, слой — за его название. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.'
+    : 'Тяните мышью — сдвинуть, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору. Блок, папку и сервис можно перетащить, слой — за его название. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.';
 }
 
 function fitCamera() {
@@ -1592,7 +1607,54 @@ function pickEdge() {
   const hit = ray.intersectObjects(view.edges.filter((r) => r.hit).map((r) => r.hit), false)[0];
   return hit?.object.userData.edge || null;
 }
+// смысловая группа под курсором — папка (плитка) или сервис (платформа); вызывается после pick — луч уже выставлен.
+// Слой целиком берётся за заголовок (см. buildFloor): пустое место этажа остаётся для управления камерой.
+function pickGroup() {
+  if (!view) return null;
+  const targets = [];
+  for (const pl of view.platforms) {
+    if (pl.clusters.length) targets.push(pl.slab);
+    for (const cr of pl.clusters) if (cr.tile) targets.push(cr.tile);
+  }
+  return ray.intersectObjects(targets, false)[0]?.object.userData.group || null;
+}
+
+// блоки группы — их и двигает перетаскивание
+function groupMembers(g) {
+  const ids = g.type === 'cluster' ? g.cr.ids
+    : g.type === 'platform' ? g.pl.clusters.flatMap((cr) => cr.ids)
+    : g.floor.plats.flatMap((pl) => pl.clusters.flatMap((cr) => cr.ids));
+  return ids.map((id) => view.nodes.get(id)).filter(Boolean);
+}
+
+// подсветка группы под курсором: плитка, платформа или плоскость слоя светлее, подпись выделена
+let hoverGroup = null;
+const sameGroup = (a, b) => a === b || (!!a && !!b && a.type === b.type && (a.cr || a.pl || a.floor) === (b.cr || b.pl || b.floor));
+function setHoverGroup(g) {
+  if (sameGroup(g, hoverGroup)) return;
+  const paint = (x, on) => {
+    if (!x) return;
+    if (x.type === 'cluster') {
+      x.cr.tile.material.color.setHex(on ? 0x3d5378 : 0x2a3446);
+      x.cr.tile.material.opacity = on ? 0.85 : 0.55;
+      x.cr.label?.element.classList.toggle('grab-hl', on);
+    } else if (x.type === 'platform') {
+      x.pl.slab.material.color.setHex(on ? 0x3a5684 : 0x1b2230);
+      x.pl.slab.material.opacity = on ? 0.95 : 0.85;
+      x.pl.label.element.classList.toggle('grab-hl', on);
+    } else {
+      x.floor.plane.material.opacity = on ? 0.16 : x.floor.plane.userData.planeOpacity;
+      x.floor.border.material.opacity = on ? 0.9 : 0.4;
+      x.floor.label.element.classList.toggle('grab-hl', on);
+    }
+  };
+  paint(hoverGroup, false);
+  hoverGroup = g;
+  paint(hoverGroup, true);
+}
+
 /* перетаскивание блока: он скользит по плоскости своего этажа (в 3D — горизонтально, в 2D — по экрану).
+   Так же перетаскиваются группы — папка, сервис, слой: все их блоки сдвигаются вместе, соседи отъезжают.
    Слушатель на родителе в фазе захвата срабатывает раньше OrbitControls и отключает вращение/сдвиг камеры. */
 const DRAG_START_PX = 4;
 let drag = null;
@@ -1604,53 +1666,88 @@ function planeHit(ev, out) {
   ray.setFromCamera(pointer, camera);
   return ray.ray.intersectPlane(dragPlane, out);
 }
+// начать перетаскивание группы: точка захвата — на плоскости её этажа
+function startGroupDrag(ev, g) {
+  if (ev.button !== 0 || !view) return;
+  const frame = g.floor;
+  const normal = new THREE.Vector3(0, 1, 0).applyQuaternion(frame.g.getWorldQuaternion(tmpQ));
+  dragPlane.setFromNormalAndCoplanarPoint(normal, frame.g.localToWorld(new THREE.Vector3()));
+  const hit = planeHit(ev, new THREE.Vector3());
+  if (!hit) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  const members = groupMembers(g);
+  drag = { group: g, frame, members, start: members.map((u) => [u.raw.x, u.raw.z]), base0: frame.base,
+           from: frame.g.worldToLocal(hit), x0: ev.clientX, y0: ev.clientY, moving: false };
+  setHoverGroup(g);
+  controls.enabled = false;
+  ev.target.setPointerCapture?.(ev.pointerId);
+}
+
 $('scene').addEventListener('pointerdown', (ev) => {
   if (ev.button !== 0) return;
   const id = pick(ev);
-  if (!id) return;
+  if (!id) {
+    if (pickEdge()) return;   // связь — только клик
+    const g = pickGroup();
+    if (g) startGroupDrag(ev, g);
+    return;
+  }
   const v = view.nodes.get(id);
   const normal = new THREE.Vector3(0, 1, 0).applyQuaternion(v.group.getWorldQuaternion(tmpQ));
   dragPlane.setFromNormalAndCoplanarPoint(normal, v.base);
   const hit = planeHit(ev, new THREE.Vector3());
   if (!hit) return;
-  drag = { id, v, grab: hit.sub(v.base), x0: ev.clientX, y0: ev.clientY, moving: false };
+  drag = { id, v, frame: v.frame, members: [v], grab: hit.sub(v.base), x0: ev.clientX, y0: ev.clientY, moving: false };
   controls.enabled = false;
   renderer.domElement.setPointerCapture(ev.pointerId);
 }, { capture: true });
 
 function moveDragged(ev) {
-  const { v } = drag;
   if (!drag.moving && Math.hypot(ev.clientX - drag.x0, ev.clientY - drag.y0) < DRAG_START_PX) return;
   drag.moving = true;
   renderer.domElement.style.cursor = 'grabbing';
+  document.body.style.cursor = 'grabbing';
+  if (drag.group?.type === 'floor') drag.frame.label.element.classList.add('dragging');
   const hit = planeHit(ev, new THREE.Vector3());
   if (!hit) return;
-  const local = v.group.worldToLocal(hit.sub(drag.grab));
-  v.raw.x = local.x;
-  v.raw.z = local.z;
-  // блок встаёт под курсор, соседние папки и платформы отъезжают; связи перекладываются у всех сдвинутых
-  const moved = fitFrames(v.frame, v.n.id);
-  if (mode === '2d') restackFloors(v.frame);
+  if (drag.group) {
+    // группа: все её блоки сдвигаются на одно и то же смещение; у слоя вместе с ними едет и его рамка
+    const d = drag.frame.g.worldToLocal(hit).sub(drag.from);
+    drag.members.forEach((u, i) => { u.raw.x = drag.start[i][0] + d.x; u.raw.z = drag.start[i][1] + d.z; });
+    if (drag.group.type === 'floor') drag.frame.base = moveRect(drag.base0, [d.x, d.z]);
+  } else {
+    const local = drag.v.group.worldToLocal(hit.sub(drag.grab));
+    drag.v.raw.x = local.x;
+    drag.v.raw.z = local.z;
+  }
+  // тащимое встаёт под курсор, соседние папки и платформы отъезжают; связи перекладываются у всех сдвинутых
+  const moved = fitFrames(drag.frame, drag.members[0]?.n.id ?? null);
+  if (mode === '2d') restackFloors(drag.frame);
   for (const rec of view.edges) if (moved.has(rec.a) || moved.has(rec.b) || rec.e.kind === 'service') refreshEdge(rec);
 }
 
 function endDrag() {
   if (!drag) return;
-  const { id, v, moving } = drag;
+  const { frame, members, group, moving } = drag;
   drag = null;
   controls.enabled = true;
   renderer.domElement.style.cursor = 'grab';
+  document.body.style.cursor = '';
+  frame.label.element.classList.remove('dragging');
   if (!moving) return;
-  // запоминаем места всех блоков этажа, которые сдвинулись (и тот, что тащили, и отъехавших соседей)
+  // запоминаем места всех блоков этажа, которые сдвинулись (и тащимые, и отъехавшие соседи); у слоя — ещё сдвиг рамки
   const saved = (offsets[current] ||= {});
+  const dragged = new Set(members);
   for (const u of view.nodes.values()) {
-    if (u.frame !== v.frame) continue;
+    if (u.frame !== frame) continue;
     const dx = u.localBase.x - u.auto[0], dz = u.localBase.z - u.auto[1];
-    if (u === v || Math.abs(u.localBase.x - u.raw.x) > 1e-6 || Math.abs(u.localBase.z - u.raw.z) > 1e-6) saved[u.n.id] = [dx, dz];
+    if (dragged.has(u) || Math.abs(u.localBase.x - u.raw.x) > 1e-6 || Math.abs(u.localBase.z - u.raw.z) > 1e-6) saved[u.n.id] = [dx, dz];
     u.raw.x = u.localBase.x;
     u.raw.z = u.localBase.z;
   }
-  fitFrames(v.frame);
+  if (group?.type === 'floor') saved['floor:' + frame.key] = [frame.base.x0 - frame.defaultBase.x0, frame.base.z0 - frame.defaultBase.z0];
+  fitFrames(frame);
   savePref('offsets', offsets);
   $('resetLayout').disabled = false;
 }
@@ -1659,7 +1756,9 @@ renderer.domElement.addEventListener('pointermove', (ev) => {
   if (drag) return;
   const id = pick(ev);
   const edge = id ? null : pickEdge();
-  renderer.domElement.style.cursor = id ? 'grab' : edge ? 'pointer' : '';
+  const group = id || edge ? null : pickGroup();
+  setHoverGroup(group);
+  renderer.domElement.style.cursor = id || group ? 'grab' : edge ? 'pointer' : '';
   if (id !== hovered || edge !== hoveredEdgeOnScene) { hovered = id; hoveredEdgeOnScene = edge; applyHighlight(); }
 });
 // перетаскивание слушаем на всём окне: курсор может уйти на панель, а отпустить блок можно где угодно
@@ -1808,6 +1907,7 @@ function renderControls() {
 
 function rebuild(refit) {
   signature = '';
+  hoverGroup = null;
   hovered = hoveredEdge = hoveredEdgeOnScene = null;
   show();
   if (refit) fitCamera();
@@ -1969,7 +2069,7 @@ renderer.setAnimationLoop(() => {
 });
 
 // доступ к состоянию схемы из консоли браузера — для отладки и автопроверок
-window.vizorDebug = { get view() { return view; }, get drag() { return drag; }, get camera() { return camera; }, get cards() { return [...cards.values()]; }, openNode: (id) => focusNode(id), builds: 0 };
+window.vizorDebug = { get view() { return view; }, get hoverGroup() { return hoverGroup; }, get drag() { return drag; }, get camera() { return camera; }, get cards() { return [...cards.values()]; }, openNode: (id) => focusNode(id), builds: 0 };
 
 applyControls();
 pollArchitecture();
