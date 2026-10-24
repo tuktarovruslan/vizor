@@ -798,16 +798,22 @@ function refreshEdge(rec) {
   for (const p of rec.dots) p.curve = curve;
 }
 
-// Блок с открытой карточкой: в цикле отрисовки плавно растёт до OPEN_SCALE и светится; под ним пульсирует кольцо его цвета
+// Блок с открытой карточкой: в цикле отрисовки плавно растёт до OPEN_SCALE и светится; под ним пульсирует кольцо его цвета.
+// Кольцо повторяет основание блока: под кубами, высокими и плоскими блоками и пирамидами — квадратное, под шарами и цилиндрами — круглое.
 const OPEN_SCALE = 1.7;
+const ROUND_SHAPES = new Set(['ball', 'cyl']);
 function setNodeOpen(v, on) {
   if (on === !!v.open) return;
   v.open = on;
   if (on) {
-    const color = (KINDS[v.n.kind] || KINDS.module).color;
-    v.openRing = new THREE.Mesh(new THREE.RingGeometry(1.9, 2.5, 48),
-      new THREE.MeshBasicMaterial({ color, transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    const k = KINDS[v.n.kind] || KINDS.module;
+    const round = ROUND_SHAPES.has(k.shape);
+    // у квадрата из 4 сегментов радиус — до угла: полустороны 1.6…2.1 → радиусы ×√2
+    const geom = round ? new THREE.RingGeometry(1.9, 2.5, 48) : new THREE.RingGeometry(1.6 * Math.SQRT2, 2.1 * Math.SQRT2, 4);
+    v.openRing = new THREE.Mesh(geom,
+      new THREE.MeshBasicMaterial({ color: k.color, transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
     v.openRing.rotation.x = -Math.PI / 2;
+    if (!round) v.openRing.rotation.z = Math.PI / 4;   // ромб → квадрат вдоль сторон блока
     v.openRing.position.copy(v.localBase).setY(0.08);
     v.group.add(v.openRing);
   } else {
@@ -1201,6 +1207,14 @@ function createCard(type, id, off = {}, size = 1) {
   range.addEventListener('input', () => setSize(range.value));
   range.addEventListener('change', saveCards);
   el.querySelector('.size').addEventListener('dblclick', () => { setSize(1); saveCards(); });
+  // Ctrl + колесо над карточкой — размер, как ползунком: щелчок колеса (~100) меняет его примерно на 10 %
+  el.addEventListener('wheel', (ev) => {
+    if (!ev.ctrlKey) return;
+    ev.preventDefault();   // иначе браузер масштабирует всю страницу
+    setSize(THREE.MathUtils.clamp(c.size * Math.exp(-ev.deltaY * 0.001), 0.5, 2));
+    clearTimeout(c.saveTimer);
+    c.saveTimer = setTimeout(saveCards, 300);
+  }, { passive: false });
   cards.set(key, c);
   el.addEventListener('pointerdown', () => raiseCard(c));
   el.addEventListener('pointerenter', () => { hoveredCard = c; applyHighlight(); });
