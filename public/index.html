@@ -608,6 +608,35 @@ function build(project) {
   buildEdges(project, visible);
 }
 
+/* Скруглённые углы рамок: слой, платформа сервиса, плитка папки. Фигура строится под настоящий размер
+   (растянутый масштабом квадрат дал бы овальные углы) и перестраивается, только когда размер меняется. */
+const CORNER = { floor: 1.6, platform: 0.9, cluster: 0.5 };
+const CURVE_SEGMENTS = 6;
+function roundedShape(w, d, r) {
+  r = Math.min(r, w / 2, d / 2);
+  const x = -w / 2, y = -d / 2, s = new THREE.Shape();
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + d - r); s.quadraticCurveTo(x + w, y + d, x + w - r, y + d);
+  s.lineTo(x + r, y + d); s.quadraticCurveTo(x, y + d, x, y + d - r);
+  s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+  return s;
+}
+// плоская заливка и контур (лежат в плоскости XY, повёрнуты к полу через rotation.x = -π/2)
+const flatFill = (sh) => new THREE.ShapeGeometry(sh, CURVE_SEGMENTS);
+const flatEdge = (sh) => new THREE.BufferGeometry().setFromPoints(sh.getPoints(CURVE_SEGMENTS));
+// плита толщиной 0.4: верх на y = 0, низ на y = −0.4
+const slabBody = (sh) => new THREE.ExtrudeGeometry(sh, { depth: 0.4, bevelEnabled: false, curveSegments: CURVE_SEGMENTS }).rotateX(-Math.PI / 2).translate(0, -0.4, 0);
+// перестроить геометрию объекта под размер w × d, если он изменился; true — перестроена
+function setRounded(obj, kind, w, d, build) {
+  const size = w.toFixed(3) + 'x' + d.toFixed(3);
+  if (obj.userData.size === size) return false;
+  obj.userData.size = size;
+  obj.geometry.dispose();
+  obj.geometry = build(roundedShape(w, d, CORNER[kind]));
+  return true;
+}
+
 function buildFloor(g, fp, span) {
   const f = fp.f;
   const plane = new THREE.Mesh(
@@ -616,7 +645,7 @@ function buildFloor(g, fp, span) {
   );
   plane.rotation.x = -Math.PI / 2;
   g.add(plane);
-  const border = new THREE.LineSegments(new THREE.EdgesGeometry(plane.geometry), new THREE.LineBasicMaterial({ color: f.color, transparent: true, opacity: 0.4 }));
+  const border = new THREE.LineLoop(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: f.color, transparent: true, opacity: 0.4 }));
   border.rotation.x = -Math.PI / 2;
   g.add(border);
   const fl = label('floor' + (fp.list.length ? '' : ' empty'), `<span class="ttl" style="color:${hex(f.color)}" title="Перетащите, чтобы сдвинуть слой целиком">${f.title}</span><small>${fp.list.length ? f.sub : fp.offOnly ? 'сервисы этого слоя скрыты' : 'в этом проекте нет'}</small>`);
@@ -696,9 +725,9 @@ function drawTag(tag, patch = {}) {
 function buildPlatform(g, floor, s, L, cx) {
   const f = FLOORS.find((x) => x.key === floor.key) || floor;
   const w = L.width + 3, d = L.depth + 3;
-  const slab = new THREE.Mesh(new THREE.BoxGeometry(1, 0.4, 1), new THREE.MeshStandardMaterial({ color: 0x1b2230, transparent: true, opacity: 0.85, roughness: 0.9 }));
+  const slab = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: 0x1b2230, transparent: true, opacity: 0.85, roughness: 0.9 }));
   g.add(slab);
-  const outline = new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry), new THREE.LineBasicMaterial({ color: 0x6b7587 }));
+  const outline = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x6b7587 }));
   g.add(outline);
   const tag = makeTag(s.id);
   g.add(tag.mesh);
@@ -718,7 +747,7 @@ function buildPlatform(g, floor, s, L, cx) {
     const cr = { ids: b.list.map((n) => n.id), base: rect(cx + b.cx, cx + b.cx + b.w, b.cz, b.cz + b.d), tile: null, label: null, view: null };
     pl.clusters.push(cr);
     if (!b.name && L.boxes.length === 1) continue;
-    cr.tile = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0x2a3446, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide }));
+    cr.tile = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0x2a3446, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide }));
     cr.tile.rotation.x = -Math.PI / 2;
     g.add(cr.tile);
     // длинный путь укорачиваем до двух последних папок: «components/sphere/buttons» → «sphere/buttons»
@@ -842,15 +871,16 @@ function fitFrames(floor, anchorId = null) {
       const r = boundsOf(pts, moveRect(cr.base, [cx + px, cz + pz]));
       if (cr.tile) {
         cr.tile.position.set((r.x0 + r.x1) / 2, 0.02, (r.z0 + r.z1) / 2);
-        cr.tile.scale.set(r.x1 - r.x0 + 0.6, r.z1 - r.z0 + 0.4, 1);
+        setRounded(cr.tile, 'cluster', r.x1 - r.x0 + 0.6, r.z1 - r.z0 + 0.4, flatFill);
         cr.label.position.set(r.x0 + 0.2, 0.05, r.z0 + 0.7);
         cr.view.w = r.x1 - r.x0;
       }
     });
     const pr = moveRect(pl.rawRect, [px, pz]);
-    for (const o of [pl.slab, pl.outline]) {
-      o.position.set((pr.x0 + pr.x1) / 2, -0.2, (pr.z0 + pr.z1) / 2);
-      o.scale.set(pr.x1 - pr.x0, 1, pr.z1 - pr.z0);
+    for (const o of [pl.slab, pl.outline]) o.position.set((pr.x0 + pr.x1) / 2, 0, (pr.z0 + pr.z1) / 2);
+    if (setRounded(pl.slab, 'platform', pr.x1 - pr.x0, pr.z1 - pr.z0, slabBody)) {
+      pl.outline.geometry.dispose();
+      pl.outline.geometry = new THREE.EdgesGeometry(pl.slab.geometry, 30);
     }
     // наклейка не шире платформы: у узкой — уменьшается целиком
     const fit = Math.min(1, (pr.x1 - pr.x0 - 1) / pl.tag.w);
@@ -860,10 +890,9 @@ function fitFrames(floor, anchorId = null) {
     pl.center = pl.group.localToWorld(pl.localCenter.clone());
     fr = union(fr, grow(pr, 3));
   });
-  for (const o of [floor.plane, floor.border]) {
-    o.position.set((fr.x0 + fr.x1) / 2, -0.3, (fr.z0 + fr.z1) / 2);
-    o.scale.set(fr.x1 - fr.x0, fr.z1 - fr.z0, 1);
-  }
+  for (const o of [floor.plane, floor.border]) o.position.set((fr.x0 + fr.x1) / 2, -0.3, (fr.z0 + fr.z1) / 2);
+  setRounded(floor.plane, 'floor', fr.x1 - fr.x0, fr.z1 - fr.z0, flatFill);
+  setRounded(floor.border, 'floor', fr.x1 - fr.x0, fr.z1 - fr.z0, flatEdge);
   floor.label.position.set(fr.x0 - 1, 0, mode === '3d' ? (fr.z0 + fr.z1) / 2 : fr.z0 + 3);
   floor.rect = fr;
   return moved;
