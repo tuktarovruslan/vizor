@@ -928,7 +928,7 @@ function restackFloors(anchor) {
    позиция = (0, baseY, 0) + q0·c − q·c + shift, где c — центр рамки по умолчанию (опорная точка формулы).
    Поворот выполняет rotateFloor — вокруг осей слоя через его текущий центр, подбирая shift так, чтобы центр стоял на месте.
    Хранится в offsets как floorT:<слой> = [rot.x, rot.y, rot.z, rot.w, dx, dy, dz], сбрасывается «Сбросить расположение». */
-const AXIS_X = new THREE.Vector3(1, 0, 0), AXIS_Y = new THREE.Vector3(0, 1, 0);
+const AXIS_X = new THREE.Vector3(1, 0, 0), AXIS_Y = new THREE.Vector3(0, 1, 0), AXIS_Z = new THREE.Vector3(0, 0, 1);
 const baseQuat = () => (mode === '2d' ? new THREE.Quaternion().setFromAxisAngle(AXIS_X, Math.PI / 2) : new THREE.Quaternion());
 const defaultCenter = (f) => new THREE.Vector3((f.defaultBase.x0 + f.defaultBase.x1) / 2, 0, (f.defaultBase.z0 + f.defaultBase.z1) / 2);
 function floorTf(saved) {
@@ -950,7 +950,7 @@ function placeFloor(f) {
   f.g.quaternion.copy(q);
   f.g.position.set(0, f.baseY, 0).add(c.clone().applyQuaternion(q0)).sub(c.applyQuaternion(q)).add(f.tf.shift);
 }
-// поворот вокруг собственной оси слоя (AXIS_X — вдоль его ширины, AXIS_Y — перпендикуляр к его плоскости)
+// поворот вокруг собственной оси слоя (AXIS_X — вдоль его ширины, AXIS_Z — вдоль глубины, AXIS_Y — перпендикуляр к плоскости)
 // через текущий центр его рамки: этот центр в мире остаётся на месте
 function rotateFloor(f, axis, angle) {
   const r = f.rect || f.defaultBase;
@@ -1202,8 +1202,8 @@ function applyControls() {
     ? { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
     : { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   $('hint').textContent = mode === '3d'
-    ? 'Тяните мышью — вращать, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору, правая кнопка — сдвинуть. Блок, папку и сервис можно перетащить, слой — за его название; зажав название слоя: колесо — поворот вокруг X, Shift + колесо — вокруг Y, W/S — от себя/к себе, A/D — влево/вправо, пробел/C — выше/ниже. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.'
-    : 'Тяните мышью — сдвинуть, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору. Блок, папку и сервис можно перетащить, слой — за его название; зажав название слоя: колесо — поворот вокруг X, Shift + колесо — вокруг Y, W/S — от себя/к себе, A/D — влево/вправо, пробел/C — выше/ниже. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.';
+    ? 'Тяните мышью — вращать, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору, правая кнопка — сдвинуть. Блок, папку и сервис можно перетащить, слой — за его название; зажав название слоя: колесо — поворот вокруг X, Shift + колесо — вокруг Z, Alt + колесо — вокруг Y, W/S — от себя/к себе, A/D — влево/вправо, пробел/C — выше/ниже. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.'
+    : 'Тяните мышью — сдвинуть, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору. Блок, папку и сервис можно перетащить, слой — за его название; зажав название слоя: колесо — поворот вокруг X, Shift + колесо — вокруг Z, Alt + колесо — вокруг Y, W/S — от себя/к себе, A/D — влево/вправо, пробел/C — выше/ниже. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.';
 }
 
 function fitCamera() {
@@ -2016,8 +2016,8 @@ addEventListener('pointermove', (ev) => { if (drag) { drag.lx = ev.clientX; drag
 addEventListener('pointerup', endDrag);
 addEventListener('pointercancel', endDrag);
 addEventListener('blur', endDrag);
-// Пока слой зажат ЛКМ за название: колесо — поворот вокруг его оси X, Shift + колесо — вокруг его оси Y (оси самого слоя,
-// через его текущий центр);
+// Пока слой зажат ЛКМ за название: колесо — поворот вокруг его оси X, Shift + колесо — вокруг оси Z,
+// Alt + колесо — вокруг оси Y (оси самого слоя, через его текущий центр);
 // W / S — от себя / к себе, A / D — влево / вправо (по горизонтали относительно камеры), пробел / C — выше / ниже.
 // Колесо слушаем на всём окне в фазе захвата: курсор над названием слоя, а не над сценой.
 const FLOOR_ROT_PER_DELTA = THREE.MathUtils.degToRad(0.075);   // щелчок колеса (~100) — 7.5°
@@ -2051,8 +2051,11 @@ addEventListener('wheel', (ev) => {
   const delta = ev.deltaY || ev.deltaX;   // Chrome при Shift отдаёт прокрутку в deltaX
   if (!delta) return;
   const angle = -delta * FLOOR_ROT_PER_DELTA;
-  transformFloor(f, () => rotateFloor(f, ev.shiftKey ? AXIS_Y : AXIS_X, angle));
+  transformFloor(f, () => rotateFloor(f, ev.altKey ? AXIS_Y : ev.shiftKey ? AXIS_Z : AXIS_X, angle));
 }, { capture: true, passive: false });
+// Alt, пока слой зажат, не отдаём браузеру: на Windows отпускание Alt переводит фокус на меню окна
+addEventListener('keyup', (ev) => { if (heldFloor() && ev.key === 'Alt') ev.preventDefault(); });
+
 // направления «от себя» и «вправо» — по горизонтали относительно камеры; клавиши — по физическому положению (любая раскладка)
 function floorMoveDir(code) {
   const forward = camera.getWorldDirection(new THREE.Vector3()).setY(0);
@@ -2064,6 +2067,7 @@ function floorMoveDir(code) {
 }
 addEventListener('keydown', (ev) => {
   const f = heldFloor();
+  if (f && ev.key === 'Alt') { ev.preventDefault(); return; }
   const dir = f && floorMoveDir(ev.code);
   if (!dir) return;
   ev.preventDefault();   // пробел иначе прокрутил бы страницу или нажал кнопку в фокусе
