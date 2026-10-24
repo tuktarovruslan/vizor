@@ -1601,18 +1601,25 @@ addEventListener('pointerdown', (ev) => { if (!ev.target.closest('#legend, #lege
 
 /* ---------- бизнес-логика без документации ---------- */
 
-// Элемент этажа «Бизнес-логика» без одноимённого .md пульсирует красным: кольцо шире «недавнего», чтобы были видны оба
+// Элемент этажа «Бизнес-логика» без одноимённого .md пульсирует красным размытым свечением — в том же стиле, что подсветка
+// открытого блока (та же текстура по форме основания), шире кольца «недавнего», чтобы были видны оба.
+// Свечение плотно к блоку обычного размера (круг радиусом ~1.45, квадрат с полустороной ~1.1) и приглушённое —
+// иначе свечения соседних блоков сливаются в одно пятно
 function updateDocAlerts() {
   if (!view) return;
   for (const v of view.nodes.values()) {
     v.noDoc = v.floor === 'logic' && !v.n.doc;
     if (v.noDoc && !v.docRing) {
-      v.docRing = new THREE.Mesh(new THREE.RingGeometry(1.75, 2.0, 40), new THREE.MeshBasicMaterial({ color: 0xf0605d, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+      const round = ROUND_SHAPES.has((KINDS[v.n.kind] || KINDS.module).shape);
+      v.docRing = new THREE.Mesh(GLOW_PLANE, new THREE.MeshBasicMaterial({ color: 0xf0605d, map: glowTexture(round), transparent: true,
+        side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+      v.docRing.userData.base = round ? 0.78 : 0.68;
       v.docRing.rotation.x = -Math.PI / 2;
       v.docRing.position.copy(v.localBase).setY(0.05);
+      v.docRing.renderOrder = 5;
       v.group.add(v.docRing);
     } else if (!v.noDoc && v.docRing) {
-      v.group.remove(v.docRing); v.docRing.geometry.dispose(); v.docRing.material.dispose(); v.docRing = null;
+      v.group.remove(v.docRing); v.docRing.material.dispose(); v.docRing = null;   // плоскость и текстура общие
       v.mesh.material.emissive.setHex(v.recent ? 0x5a4a00 : 0x000000);
     }
   }
@@ -1814,8 +1821,10 @@ renderer.setAnimationLoop(() => {
     for (const v of view.nodes.values()) {
       if (v.ring) { v.ring.scale.setScalar(1 + pulse * 0.35); v.ring.material.opacity = 0.9 - pulse * 0.6; }
       if (v.docRing) {
-        v.docRing.scale.setScalar(1 + alarm * 0.3);
-        v.docRing.material.opacity = 0.95 - alarm * 0.65;
+        // у открытого (увеличенного) блока красное свечение отодвигается наружу, за его собственную подсветку
+        const grown = 1 + (v.mesh.scale.x - 1) * 0.45;
+        v.docRing.scale.setScalar(v.docRing.userData.base * grown * (1 + alarm * 0.12));
+        v.docRing.material.opacity = 0.6 - alarm * 0.35;
         // недавно изменённый остаётся жёлтым, остальные мягко краснеют в такт кольцу
         if (!v.recent) v.mesh.material.emissive.setRGB(0.42 * (1 - alarm), 0, 0);
       }
