@@ -923,28 +923,43 @@ function restackFloors(anchor) {
   refreshFloors(moved);
 }
 
-/* Преобразование слоя в осях сцены (одинаково в 2D и 3D): поворот вокруг горизонтальной оси X (rx), вокруг
-   вертикальной оси Y (ry) и сдвиг (dx, dy, dz). Вращается вокруг центра рамки по умолчанию — слой поворачивается на месте.
-   Хранится в offsets как floorT:<слой> = [rx, ry, dx, dy, dz], сбрасывается «Сбросить расположение». */
+/* Преобразование слоя: собственный поворот rot (накопленные повороты вокруг осей самого слоя) и сдвиг shift.
+   Положение: q = q0 · rot (q0 — базовый разворот слоя: в 2D он смотрит на зрителя);
+   позиция = (0, baseY, 0) + q0·c − q·c + shift, где c — центр рамки по умолчанию (опорная точка формулы).
+   Поворот выполняет rotateFloor — вокруг осей слоя через его текущий центр, подбирая shift так, чтобы центр стоял на месте.
+   Хранится в offsets как floorT:<слой> = [rot.x, rot.y, rot.z, rot.w, dx, dy, dz], сбрасывается «Сбросить расположение». */
 const AXIS_X = new THREE.Vector3(1, 0, 0), AXIS_Y = new THREE.Vector3(0, 1, 0);
+const baseQuat = () => (mode === '2d' ? new THREE.Quaternion().setFromAxisAngle(AXIS_X, Math.PI / 2) : new THREE.Quaternion());
+const defaultCenter = (f) => new THREE.Vector3((f.defaultBase.x0 + f.defaultBase.x1) / 2, 0, (f.defaultBase.z0 + f.defaultBase.z1) / 2);
 function floorTf(saved) {
-  if (saved?.length === 5) { const [rx, ry, dx, dy, dz] = saved; return { rx, ry, shift: new THREE.Vector3(dx, dy, dz) }; }
-  // прежний формат [yaw, tilt, lift] — переносится только подъём
-  return { rx: 0, ry: 0, shift: new THREE.Vector3(0, saved?.length === 3 ? saved[2] : 0, 0) };
+  if (saved?.length === 7) return { rot: new THREE.Quaternion(...saved.slice(0, 4)), shift: new THREE.Vector3(...saved.slice(4)) };
+  if (saved?.length === 5) {
+    // формат [rx, ry, dx, dy, dz] — повороты в осях сцены: q = Ry · Rx · q0 → rot = q0⁻¹ · Ry · Rx · q0
+    const [rx, ry, dx, dy, dz] = saved, q0 = baseQuat();
+    const rot = q0.clone().invert()
+      .multiply(new THREE.Quaternion().setFromAxisAngle(AXIS_Y, ry))
+      .multiply(new THREE.Quaternion().setFromAxisAngle(AXIS_X, rx))
+      .multiply(q0);
+    return { rot, shift: new THREE.Vector3(dx, dy, dz) };
+  }
+  // самый ранний формат [yaw, tilt, lift] — переносится только подъём
+  return { rot: new THREE.Quaternion(), shift: new THREE.Vector3(0, saved?.length === 3 ? saved[2] : 0, 0) };
 }
 function placeFloor(f) {
-  const q0 = new THREE.Quaternion();
-  if (mode === '2d') q0.setFromAxisAngle(AXIS_X, Math.PI / 2);   // в 2D слой развёрнут к зрителю
-  // повороты в осях сцены: сначала вокруг X, затем вокруг Y — поверх базового положения слоя
-  const q = new THREE.Quaternion().setFromAxisAngle(AXIS_Y, f.tf.ry)
-    .multiply(new THREE.Quaternion().setFromAxisAngle(AXIS_X, f.tf.rx))
-    .multiply(q0);
-  const pivot = new THREE.Vector3((f.defaultBase.x0 + f.defaultBase.x1) / 2, 0, (f.defaultBase.z0 + f.defaultBase.z1) / 2);
+  const q0 = baseQuat(), q = q0.clone().multiply(f.tf.rot), c = defaultCenter(f);
   f.g.quaternion.copy(q);
-  f.g.position.set(0, f.baseY, 0)
-    .add(pivot.clone().applyQuaternion(q0))
-    .sub(pivot.applyQuaternion(q))
-    .add(f.tf.shift);
+  f.g.position.set(0, f.baseY, 0).add(c.clone().applyQuaternion(q0)).sub(c.applyQuaternion(q)).add(f.tf.shift);
+}
+// поворот вокруг собственной оси слоя (AXIS_X — вдоль его ширины, AXIS_Y — перпендикуляр к его плоскости)
+// через текущий центр его рамки: этот центр в мире остаётся на месте
+function rotateFloor(f, axis, angle) {
+  const r = f.rect || f.defaultBase;
+  const p = new THREE.Vector3((r.x0 + r.x1) / 2, 0, (r.z0 + r.z1) / 2).sub(defaultCenter(f));   // центр относительно опорной точки
+  const q0 = baseQuat(), q = q0.clone().multiply(f.tf.rot);
+  const rot = f.tf.rot.clone().multiply(new THREE.Quaternion().setFromAxisAngle(axis, angle));
+  const q2 = q0.clone().multiply(rot);
+  const shift = f.tf.shift.clone().add(p.clone().applyQuaternion(q)).sub(p.applyQuaternion(q2));
+  return { rot, shift };
 }
 
 // после сдвига или поворота слоёв: мировые точки их блоков и платформ, и связи, которые к ним ведут
@@ -2001,7 +2016,8 @@ addEventListener('pointermove', (ev) => { if (drag) { drag.lx = ev.clientX; drag
 addEventListener('pointerup', endDrag);
 addEventListener('pointercancel', endDrag);
 addEventListener('blur', endDrag);
-// Пока слой зажат ЛКМ за название: колесо — поворот вокруг оси X, Shift + колесо — вокруг оси Y;
+// Пока слой зажат ЛКМ за название: колесо — поворот вокруг его оси X, Shift + колесо — вокруг его оси Y (оси самого слоя,
+// через его текущий центр);
 // W / S — от себя / к себе, A / D — влево / вправо (по горизонтали относительно камеры), пробел / C — выше / ниже.
 // Колесо слушаем на всём окне в фазе захвата: курсор над названием слоя, а не над сценой.
 const FLOOR_ROT_PER_DELTA = THREE.MathUtils.degToRad(0.075);   // щелчок колеса (~100) — 7.5°
@@ -2011,7 +2027,7 @@ function transformFloor(f, change) {
   Object.assign(f.tf, change(f.tf));
   placeFloor(f);
   refreshFloors(new Set([f]));
-  (offsets[current] ||= {})['floorT:' + f.key] = [f.tf.rx, f.tf.ry, ...f.tf.shift.toArray()];
+  (offsets[current] ||= {})['floorT:' + f.key] = [...f.tf.rot.toArray(), ...f.tf.shift.toArray()];
   savePref('offsets', offsets);
   $('resetLayout').disabled = false;
   rebaseDrag();
@@ -2035,7 +2051,7 @@ addEventListener('wheel', (ev) => {
   const delta = ev.deltaY || ev.deltaX;   // Chrome при Shift отдаёт прокрутку в deltaX
   if (!delta) return;
   const angle = -delta * FLOOR_ROT_PER_DELTA;
-  transformFloor(f, (t) => (ev.shiftKey ? { ry: t.ry + angle } : { rx: t.rx + angle }));
+  transformFloor(f, () => rotateFloor(f, ev.shiftKey ? AXIS_Y : AXIS_X, angle));
 }, { capture: true, passive: false });
 // направления «от себя» и «вправо» — по горизонтали относительно камеры; клавиши — по физическому положению (любая раскладка)
 function floorMoveDir(code) {
