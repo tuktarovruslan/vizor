@@ -40,7 +40,8 @@
   #home, #resetLayout { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 3px 10px; }
   #resetLayout:disabled { opacity: .4; cursor: default; }
 
-  #legend { left: 62px; bottom: 12px; padding: 10px 14px; font-size: 12px; max-width: 300px; }
+  /* нижние элементы одной высоты BOTTOM_H = 40 px: шестерёнка, свёрнутая «Как читать схему», шапка «Недавно изменено» */
+  #legend { left: 60px; bottom: 12px; padding: 10px 14px; font-size: 12px; max-width: 300px; min-height: 40px; }
   #legend h2, #recent h2 { font-size: 12px; margin: 0 0 6px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
   #legend ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 12px; }
   #legend li { display: flex; align-items: center; gap: 6px; }
@@ -52,7 +53,7 @@
 
   #recent { right: 12px; bottom: 12px; padding: 0; font-size: 12px; width: 260px; overflow: hidden; }
   /* шапка-кнопка сворачивает список: тело схлопывается по высоте, окно остаётся прижатым к низу */
-  #recent .head { width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: none; border: 0; text-align: left; }
+  #recent .head { width: 100%; height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 14px; background: none; border: 0; text-align: left; }
   #recent .head .ttl { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
   #recent .head .count { margin-left: auto; color: var(--muted); font-size: 11px; font-weight: 600; min-width: 18px; text-align: center;
                          padding: 1px 6px; border-radius: 8px; border: 1px solid var(--border); }
@@ -167,35 +168,39 @@
 
   #msg { position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
   /* значок «как читать схему» — только на узких экранах, вместо постоянной легенды */
-  #legendBtn { display: none; left: 62px; bottom: 12px; width: 42px; height: 42px; padding: 0; border-radius: 12px;
+  #legendBtn { display: none; left: 60px; bottom: 12px; width: 40px; height: 40px; padding: 0; border-radius: 12px;
                align-items: center; justify-content: center; color: var(--muted); }
   #legendBtn:hover, #legendBtn[aria-expanded="true"] { color: var(--text); border-color: var(--accent); }
 
   /* настройки пользователя: шестерёнка в левом нижнем углу, над ней — панель с ползунками */
-  #settingsBtn { left: 12px; bottom: 12px; width: 42px; height: 42px; padding: 0; border-radius: 12px;
+  #settingsBtn { left: 12px; bottom: 12px; width: 40px; height: 40px; padding: 0; border-radius: 12px;
                  display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
   #settingsBtn svg { transition: transform .4s ease; }
   #settingsBtn:hover, #settingsBtn[aria-expanded="true"] { color: var(--text); border-color: var(--accent); }
   #settingsBtn[aria-expanded="true"] svg { transform: rotate(60deg); }
-  #settings { left: 12px; bottom: 62px; width: 320px; max-width: calc(100vw - 24px); padding: 12px 16px 14px; font-size: 13px; z-index: 15; }
+  #settings { left: 12px; bottom: 60px; width: 320px; max-width: calc(100vw - 24px); padding: 12px 16px 14px; font-size: 13px; z-index: 15; }
   #settings[hidden] { display: none; }
   #settings h2 { font-size: 12px; margin: 0 0 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
   #settings .sub { margin: -4px 0 12px; color: var(--muted); font-size: 12px; }
-  #settings .row { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; margin-bottom: 12px; }
+  #settings .row { display: grid; grid-template-columns: 1fr auto auto; gap: 2px 10px; align-items: center; margin-bottom: 12px; }
   #settings .row label { font-weight: 600; }
   #settings .row output { font: 12px ui-monospace, Consolas, monospace; color: var(--text); min-width: 40px; text-align: right; }
   #settings .row input { grid-column: 1 / -1; width: 100%; margin: 4px 0 0; accent-color: var(--accent); cursor: pointer; }
   #settings .row small { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
   #settings .foot { display: flex; justify-content: flex-end; }
+  #settings .row .reset { background: none; border: 1px solid var(--border); border-radius: 6px; width: 24px; height: 22px; padding: 0;
+                          color: var(--muted); font-size: 13px; line-height: 1; }
+  #settings .row .reset:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+  #settings button:disabled { opacity: .35; cursor: default; }
   #settings .foot button { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 3px 10px; color: var(--muted); }
   #settings .foot button:hover { color: var(--text); border-color: var(--accent); }
   @media (max-width: 760px) {
     #legendBtn { display: inline-flex; }
-    #legend { display: none; left: 12px; right: 12px; bottom: 62px; max-width: none; max-height: 60vh; overflow: auto; }
+    #legend { display: none; left: 12px; right: 12px; bottom: 60px; max-width: none; max-height: 60vh; overflow: auto; }
     #legend.open { display: block; }
     #legend summary { pointer-events: none; list-style: none; }
     #legend summary::-webkit-details-marker { display: none; }
-    #recent { left: 112px; width: auto; }
+    #recent { left: 108px; width: auto; }
     #recent ul { max-height: calc(25vh - 40px); }
   }
 </style>
@@ -372,10 +377,11 @@ const PAN_PX_PER_DELTA = 1.2;
 
 // Настройки пользователя (шестерёнка слева внизу): множители чувствительности колеса, хранятся в браузере
 const SETTINGS = [
-  { key: 'zoom', label: 'Приближение', hint: 'Ctrl + колесо' },
-  { key: 'panX', label: 'Сдвиг по горизонтали', hint: 'Shift + колесо' },
-  { key: 'panY', label: 'Сдвиг по вертикали', hint: 'колесо' },
+  { key: 'zoom', label: 'Приближение', hint: 'Ctrl + колесо', max: 5 },
+  { key: 'panX', label: 'Сдвиг по горизонтали', hint: 'Shift + колесо', max: 3 },
+  { key: 'panY', label: 'Сдвиг по вертикали', hint: 'колесо', max: 3 },
 ];
+const SETTING_DEFAULT = 1;
 const settings = { zoom: 1, panX: 1, panY: 1, ...loadPref('settings', {}) };
 function applySettings() {
   controls.zoomSpeed = settings.zoom;
@@ -384,21 +390,27 @@ function applySettings() {
     if (!input) continue;
     input.value = settings[s.key];
     document.querySelector(`output[for="set-${s.key}"]`).textContent = '×' + settings[s.key].toFixed(1);
+    // своя кнопка сброса у каждой настройки — доступна, только когда значение отличается от обычного
+    document.querySelector(`[data-reset="${s.key}"]`).disabled = settings[s.key] === SETTING_DEFAULT;
   }
+  $('settingsReset').disabled = SETTINGS.every((s) => settings[s.key] === SETTING_DEFAULT);
 }
+const setSetting = (key, value) => { settings[key] = value; applySettings(); savePref('settings', settings); };
 $('settingsRows').innerHTML = SETTINGS.map((s) => `<div class="row">
   <label for="set-${s.key}">${s.label}</label><output for="set-${s.key}"></output>
-  <input id="set-${s.key}" type="range" min="0.2" max="3" step="0.1">
-  <small>${s.hint}</small></div>`).join('');
+  <button class="reset" data-reset="${s.key}" title="Вернуть ×${SETTING_DEFAULT.toFixed(1)}" aria-label="Вернуть «${s.label}» по умолчанию">↺</button>
+  <input id="set-${s.key}" type="range" min="0.2" max="${s.max}" step="0.1">
+  <small>${s.hint} · от ×0.2 до ×${s.max}</small></div>`).join('');
 $('settingsRows').addEventListener('input', (ev) => {
   const s = SETTINGS.find((x) => 'set-' + x.key === ev.target.id);
-  if (!s) return;
-  settings[s.key] = Number(ev.target.value);
-  applySettings();
-  savePref('settings', settings);
+  if (s) setSetting(s.key, Number(ev.target.value));
+});
+$('settingsRows').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-reset]');
+  if (b) setSetting(b.dataset.reset, SETTING_DEFAULT);
 });
 $('settingsReset').onclick = () => {
-  for (const s of SETTINGS) settings[s.key] = 1;
+  for (const s of SETTINGS) settings[s.key] = SETTING_DEFAULT;
   applySettings();
   savePref('settings', settings);
 };
