@@ -111,7 +111,80 @@ function importSpecs(text, ext) {
 // Swagger UI с deepLinking открывает адрес по ссылке #/<тег>/<operationId>; пробелы в имени заменяются на «_»
 const deepLink = (s) => encodeURIComponent(String(s).trim().replace(/\s/g, '_'));
 
-// Описание адресов из openapi.json сервиса: метод, краткое описание и ссылка на адрес в Swagger
+// Схема из openapi.json в упрощённом виде для панели связи: тип, ограничения и поля, $ref раскрыты
+const refTarget = (spec, ref) => ref.replace(/^#\//, '').split('/').reduce((o, k) => o?.[k], spec);
+
+function constraintsOf(s) {
+  const c = [];
+  if (s.minLength != null || s.maxLength != null) c.push(`длина ${s.minLength ?? 0}–${s.maxLength ?? '∞'}`);
+  if (s.minimum != null) c.push(`≥ ${s.minimum}`);
+  if (s.maximum != null) c.push(`≤ ${s.maximum}`);
+  if (s.minItems != null || s.maxItems != null) c.push(`элементов ${s.minItems ?? 0}–${s.maxItems ?? '∞'}`);
+  if (s.pattern) c.push(`шаблон ${s.pattern}`);
+  if (s.nullable) c.push('может быть null');
+  return c.join(', ') || null;
+}
+
+function simplifySchema(spec, s, seen = new Set()) {
+  if (!s || typeof s !== 'object') return null;
+  if (s.$ref) {
+    const name = s.$ref.split('/').pop();
+    if (seen.has(s.$ref) || seen.size > 8) return { type: 'object', ref: name, recursive: true };
+    const r = simplifySchema(spec, refTarget(spec, s.$ref), new Set([...seen, s.$ref]));
+    return r && { ...r, ref: r.ref || name };
+  }
+  if (s.allOf) {
+    const parts = s.allOf.map((x) => simplifySchema(spec, x, seen)).filter(Boolean);
+    const props = parts.flatMap((p) => p.properties || []);
+    return { type: 'object', description: s.description || null, properties: props };
+  }
+  const variants = s.oneOf || s.anyOf;
+  if (variants) return { type: 'variants', description: s.description || null, variants: variants.map((x) => simplifySchema(spec, x, seen)).filter(Boolean) };
+  const required = new Set(s.required || []);
+  const type = s.type || (s.properties ? 'object' : s.items ? 'array' : null);
+  return {
+    type,
+    format: s.format || null,
+    description: s.description || null,
+    enum: s.enum || null,
+    constraints: constraintsOf(s),
+    items: type === 'array' ? simplifySchema(spec, s.items, seen) : null,
+    properties: s.properties
+      ? Object.entries(s.properties).map(([name, p]) => ({ name, required: required.has(name), ...simplifySchema(spec, p, seen) }))
+      : null,
+  };
+}
+
+// тело запроса или ответа: JSON, если есть, иначе первый тип содержимого; пример — из example, examples или схемы
+function bodyOf(spec, content) {
+  if (!content) return null;
+  const type = content['application/json'] ? 'application/json' : Object.keys(content)[0];
+  if (!type) return null;
+  const media = content[type];
+  const firstExample = media.examples && Object.values(media.examples)[0];
+  const example = media.example ?? (firstExample?.$ref ? refTarget(spec, firstExample.$ref)?.value : firstExample?.value) ?? media.schema?.example;
+  return { contentType: type, schema: simplifySchema(spec, media.schema), example: example ?? null };
+}
+
+function contractOf(spec, op, shared = []) {
+  const deref = (x) => (x?.$ref ? refTarget(spec, x.$ref) : x);
+  const params = [...shared, ...(op.parameters || [])].map(deref).filter(Boolean).map((p) => ({
+    name: p.name, in: p.in, required: !!p.required, description: p.description || null, ...simplifySchema(spec, p.schema),
+  }));
+  const reqBody = deref(op.requestBody);
+  return {
+    request: {
+      params,
+      body: reqBody ? { required: !!reqBody.required, description: reqBody.description || null, ...bodyOf(spec, reqBody.content) } : null,
+    },
+    responses: Object.entries(op.responses || {}).map(([code, r]) => {
+      const res = deref(r) || {};
+      return { status: code, description: res.description || null, body: bodyOf(spec, res.content) };
+    }),
+  };
+}
+
+// Описание адресов из openapi.json сервиса: метод, краткое описание, структура запроса и ответов, ссылка в Swagger
 async function attachOpenApi(root, services, routes) {
   for (const svc of services) {
     if (!svc.openapi) continue;
@@ -133,6 +206,7 @@ async function attachOpenApi(root, services, routes) {
           summary: op.summary || null,
           operationId: op.operationId || null,
           docs: ui && op.operationId ? `${ui}#/${deepLink(op.tags?.[0] || 'default')}/${deepLink(op.operationId)}` : ui,
+          ...contractOf(spec, op, ops.parameters),
         }));
     }
   }
@@ -214,8 +288,10 @@ export async function buildArchitecture(project) {
     if (!from || !to || from.id === to.id) return;
     const key = `${from.id}>${to.id}`;
     const e = edges.get(key);
-    if (e) { e.count++; return; }
-    edges.set(key, { from: from.id, to: to.id, kind, label: label || null, count: 1 });
+    if (e) { e.count++; return e; }
+    const created = { from: from.id, to: to.id, kind, label: label || null, count: 1 };
+    edges.set(key, created);
+    return created;
   }
 
   function resolve(fromFile, spec) {
@@ -310,7 +386,16 @@ export async function buildArchitecture(project) {
     for (const m of text.matchAll(API_CALL_RE)) {
       const call = m[1].replace(/\/$/, '');
       const r = routes.find((r) => routeMatches(r.path, call));
-      if (r) addEdge(n, r.node, 'api', call);
+      if (!r) continue;
+      const e = addEdge(n, r.node, 'api', call);
+      // метод вызова — из `method: 'POST'` рядом с адресом (до следующего вызова), иначе GET
+      let near = text.slice(m.index, m.index + 400);
+      const next = near.slice(1).search(/fetch\(|axios|['"`]\/api/);
+      if (next >= 0) near = near.slice(0, next + 1);
+      // axios.post('/api/…') — метод стоит прямо перед адресом
+      const before = text.slice(Math.max(0, m.index - 20), m.index).match(/\.(get|post|put|patch|delete)\(\s*$/i)?.[1];
+      const method = (before || near.match(/\bmethod\s*:\s*['"`](\w+)['"`]/)?.[1] || 'GET').toUpperCase();
+      if (e && !(e.methods ||= []).includes(method)) e.methods.push(method);
     }
   }
 

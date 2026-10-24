@@ -89,6 +89,42 @@
   .method { font: 700 11px/1 ui-monospace, Consolas, monospace; padding: 4px 6px; border-radius: 5px; color: #0d1016; background: #9aa3b2; flex: none; margin-top: 1px; }
   .m-get { background: #61affe; } .m-post { background: #49cc90; } .m-put { background: #fca130; } .m-patch { background: #50e3c2; } .m-delete { background: #f93e3e; }
 
+  /* панель связи «запрос к API»: запрос туда, ответы обратно, поля с типами */
+  #info.wide { width: 460px; max-height: calc(100vh - 110px - 70px); }
+  #info .ends { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; margin: 4px 0 10px; font-size: 13px; }
+  #info .ends > span { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); overflow-wrap: anywhere; }
+  #info .ends > span small { display: block; color: var(--muted); font-size: 11px; }
+  #info .ends button { background: none; border: 0; padding: 0; text-align: left; font-weight: 600; }
+  #info .ends button:hover { color: var(--recent); }
+  #info .ends .arrows { color: var(--muted); font-size: 15px; line-height: 1.1; text-align: center; border: 0; padding: 0; }
+  #info .ends .arrows .q { color: #ffd166; } #info .ends .arrows .a { color: #5ee0a0; }
+  #info .op { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0 4px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 13px; }
+  #info .op a { color: #9cc0ff; font-weight: 600; white-space: nowrap; margin-left: auto; }
+  #info .dir { border-left: 3px solid var(--c); padding: 2px 0 2px 10px; margin: 8px 0; }
+  #info .dir > h4 { margin-top: 2px; color: var(--c); }
+  #info .dir .ct { color: var(--muted); font-size: 11px; margin: 0 0 4px; }
+  #info table.fields { width: 100%; border-collapse: collapse; font-size: 12px; margin: 2px 0 4px; }
+  #info table.fields td { padding: 4px 6px 4px 0; vertical-align: top; border-top: 1px solid rgba(43, 50, 64, .7); }
+  #info .dir code { font: 11.5px ui-monospace, Consolas, monospace; color: var(--text); }
+  #info table.fields code { font: 600 12px ui-monospace, Consolas, monospace; color: var(--text); }
+  #info table.fields .rq { color: var(--bad); margin-left: 2px; font-weight: 700; }
+  #info table.fields .d, #info table.fields .c { color: var(--muted); font-size: 11px; }
+  #info table.fields td.t { white-space: nowrap; text-align: right; font: 12px ui-monospace, Consolas, monospace; color: #9cc0ff; }
+  #info table.fields td.t .c { font-family: inherit; }
+  #info .status { font: 700 11px/1 ui-monospace, Consolas, monospace; padding: 3px 6px; border-radius: 5px; color: #0d1016; background: #9aa3b2; }
+  #info .status.s2 { background: #5ee0a0; } #info .status.s4 { background: #fca130; } #info .status.s5 { background: #f0605d; }
+  #info details.resp { margin: 6px 0; }
+  #info details.resp > summary { cursor: pointer; display: flex; gap: 8px; align-items: center; font-size: 13px; list-style: none; }
+  #info details.resp > summary::before { content: "▸"; color: var(--muted); font-size: 11px; transition: transform .2s; }
+  #info details.resp[open] > summary::before { transform: rotate(90deg); }
+  #info details.resp > div { padding: 4px 0 0 18px; }
+  #info details.ex > summary { cursor: pointer; color: var(--muted); font-size: 11px; margin-top: 4px; }
+  #info pre { margin: 4px 0 0; padding: 8px; border-radius: 8px; background: rgba(0, 0, 0, .3); border: 1px solid var(--border);
+              font: 11.5px/1.45 ui-monospace, Consolas, monospace; overflow: auto; max-height: 220px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #info li .linkbtn { margin-left: auto; flex: none; background: none; border: 1px solid var(--border); border-radius: 6px; padding: 0 6px; font-size: 11px; color: #9cc0ff; }
+  #info li .linkbtn:hover { border-color: #9cc0ff; color: #9cc0ff; }
+  #info ul li:has(.linkbtn) { display: flex; align-items: center; gap: 6px; }
+
   /* подписи в сцене */
   .lbl { font-size: 11px; color: #cfd6e2; white-space: nowrap; text-shadow: 0 1px 3px #000, 0 0 2px #000; padding-top: 4px; transition: opacity .3s ease; }
   .lbl.recent { color: var(--recent); font-weight: 600; }
@@ -206,7 +242,7 @@ const KINDS = {
 const EDGES = {
   import:  { name: 'подключает файл',            color: 0x6d86b8, out: 'Подключает', in: 'Подключается в' },
   route:   { name: 'адрес API → обработчик',      color: 0xffd166, out: 'Обрабатывается в', in: 'Обрабатывает адрес' },
-  api:     { name: 'запрос к API',               color: 0xffd166, out: 'Запрашивает', in: 'Запрашивается из' },
+  api:     { name: 'запрос к API (клик — подробности)', color: 0xffd166, out: 'Запрашивает', in: 'Запрашивается из' },
   db:      { name: 'работа с таблицей',          color: 0xe98a4f, out: 'Работает с таблицей', in: 'Используется в' },
   via:     { name: 'через скрытые слои',         color: 0xc0c8d8, out: 'Связан через скрытые слои', in: 'Связан через скрытые слои' },
   service: { name: 'связь сервисов',             color: 0x9aa3b2, out: 'Связан с', in: 'Связан с' },
@@ -226,12 +262,16 @@ function floorOf(n) {
 }
 
 const RECENT_MS = 15 * 60 * 1000;
+// по связи «запрос к API» точки бегут в обе стороны: жёлтые — запрос к API, зелёные — ответ фронтенду
+const RESPONSE_COLOR = 0x5ee0a0;
+const HOT_COLOR = 0xffeeb0;
 const hex = (c) => '#' + c.toString(16).padStart(6, '0');
 
 for (const k of Object.values(KINDS)) $('kinds').insertAdjacentHTML('beforeend', `<li><span class="sw" style="background:${hex(k.color)}"></span>${k.name}</li>`);
 for (const [key, e] of Object.entries(EDGES)) {
   $('edgekinds').insertAdjacentHTML('beforeend', `<li><span class="ln${key === 'via' ? ' dash' : ''}" style="background:${hex(e.color)}"></span>${e.name}</li>`);
 }
+$('edgekinds').insertAdjacentHTML('beforeend', `<li><span class="sw" style="background:${hex(RESPONSE_COLOR)};border-radius:50%"></span>ответ API фронтенду</li>`);
 $('edgekinds').insertAdjacentHTML('beforeend', `<li><span class="sw" style="background:var(--recent);border-radius:50%"></span>изменён за 15 мин</li>`);
 $('edgekinds').insertAdjacentHTML('beforeend', `<li><span class="sw" style="background:var(--bad);border-radius:50%"></span>логика без документации</li>`);
 
@@ -304,6 +344,7 @@ let data = null, signature = '', current = null;
 let world = null;          // THREE.Group текущего проекта
 let view = null;           // узлы, рёбра, платформы и бегущие точки текущей сцены
 let hovered = null, selected = null;
+let hoveredEdge = null, selectedEdge = null;   // связь «запрос к API» под курсором и открытая в панели
 let status = {};
 
 /* ---------- раскладка ---------- */
@@ -691,34 +732,57 @@ function addEdgeObject(e, a, b) {
   } else {
     obj = new THREE.Mesh(edgeGeometry(e.kind, curve), new THREE.MeshBasicMaterial({ color: meta.color, transparent: true, opacity: 0.75 }));
   }
-  const rec = { e, obj, base: obj.material.opacity, a, b, dots: [] };
+  const rec = { e, obj, base: obj.material.opacity, a, b, dots: [], hot: false, curve };
   if (e.kind === 'api' || e.kind === 'db' || e.kind === 'service') {
-    // бегущие точки показывают направление запроса
-    for (let i = 0; i < 3; i++) {
-      const dot = new THREE.Mesh(new THREE.SphereGeometry(e.kind === 'service' ? 0.35 : 0.22, 10, 8), new THREE.MeshBasicMaterial({ color: meta.color, transparent: true }));
-      world.add(dot);
-      const particle = { dot, curve, t: i / 3, edge: e };
-      view.particles.push(particle);
-      rec.dots.push(particle);
+    // бегущие точки показывают направление запроса; у запроса к API ещё и ответ — обратно, своим цветом
+    const back = e.kind === 'api' ? [false, true] : [false];
+    for (const isBack of back) {
+      for (let i = 0; i < 3; i++) {
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(e.kind === 'service' ? 0.35 : 0.22, 10, 8),
+          new THREE.MeshBasicMaterial({ color: isBack ? RESPONSE_COLOR : meta.color, transparent: true }));
+        world.add(dot);
+        const particle = { dot, curve, t: i / 3 + (isBack ? 1 / 6 : 0), edge: e, rec, back: isBack };
+        view.particles.push(particle);
+        rec.dots.push(particle);
+      }
     }
+  }
+  if (e.kind === 'api') {
+    // тонкую трубку трудно поймать мышью — рядом невидимая толстая, по ней наведение и клик
+    rec.hit = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.7, 6), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, transparent: true, opacity: 0 }));
+    rec.hit.userData.edge = rec;
+    world.add(rec.hit);
   }
   world.add(obj);
   view.edges.push(rec);
 }
 
-function edgeGeometry(kind, curve) {
+// hot — связь под курсором или выбранная: трубка толще
+function edgeGeometry(kind, curve, hot = false) {
   if (kind === 'via') return new THREE.BufferGeometry().setFromPoints(curve.getPoints(40));
   if (kind === 'import' || kind === 'route') return new THREE.BufferGeometry().setFromPoints(curve.getPoints(24));
-  return new THREE.TubeGeometry(curve, 40, kind === 'service' ? 0.18 : 0.09, 6);
+  return new THREE.TubeGeometry(curve, 40, kind === 'service' ? 0.18 : hot ? 0.26 : 0.09, 8);
 }
 
 // связь заново прокладывается между текущими положениями концов (после перетаскивания блока)
 function refreshEdge(rec) {
   const curve = curveBetween(rec.a, rec.b, rec.e.kind);
+  rec.curve = curve;
   rec.obj.geometry.dispose();
-  rec.obj.geometry = edgeGeometry(rec.e.kind, curve);
+  rec.obj.geometry = edgeGeometry(rec.e.kind, curve, rec.hot);
   if (rec.e.kind === 'via') rec.obj.computeLineDistances();
+  if (rec.hit) { rec.hit.geometry.dispose(); rec.hit.geometry = new THREE.TubeGeometry(curve, 24, 0.7, 6); }
   for (const p of rec.dots) p.curve = curve;
+}
+
+// утолщение и подсветка связи под курсором или выбранной
+function setEdgeHot(rec, hot) {
+  if (rec.hot === hot) return;
+  rec.hot = hot;
+  rec.obj.geometry.dispose();
+  rec.obj.geometry = edgeGeometry(rec.e.kind, rec.curve, hot);
+  rec.obj.material.color.setHex(hot ? HOT_COLOR : (EDGES[rec.e.kind] || EDGES.import).color);
+  for (const p of rec.dots) p.dot.scale.setScalar(hot ? 1.7 : 1);
 }
 
 // Связи между видимыми блоками. Если путь идёт через скрытые слои (например фронтенд → API → логика → таблица,
@@ -786,8 +850,8 @@ function applyControls() {
     ? { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
     : { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   $('hint').textContent = mode === '3d'
-    ? 'Тяните мышью — вращать, колесо — приблизить, правая кнопка — сдвинуть. Блок можно перетащить. Клик по блоку — подробности и связи.'
-    : 'Тяните мышью — сдвинуть, колесо — приблизить. Блок можно перетащить. Клик по блоку — подробности и связи.';
+    ? 'Тяните мышью — вращать, колесо — приблизить, правая кнопка — сдвинуть. Блок можно перетащить. Клик по блоку — подробности и связи, по жёлтой связи «запрос к API» — что уходит в API и что приходит обратно.'
+    : 'Тяните мышью — сдвинуть, колесо — приблизить. Блок можно перетащить. Клик по блоку — подробности и связи, по жёлтой связи «запрос к API» — что уходит в API и что приходит обратно.';
 }
 
 function fitCamera() {
@@ -852,21 +916,24 @@ function stepFades(now) {
   }
 }
 
+// В фокусе либо блок (под курсором или выбранный) с его связями, либо одна связь «запрос к API» с её концами
 function applyHighlight() {
   if (!view) return;
-  const focus = hovered || selected;
-  const near = focus ? neighbours(focus) : null;
+  const edge = hovered ? null : hoveredEdge || (selected ? null : selectedEdge);
+  const focus = edge ? null : hovered || selected;
+  const near = edge ? new Set([edge.e.from, edge.e.to]) : focus ? neighbours(focus) : null;
+  const edgeOn = (r) => (edge ? r === edge : !focus || r.e.from === focus || r.e.to === focus);
   for (const [id, v] of view.nodes) {
     const on = !near || near.has(id);
     fadeTo(v.mesh.material, on ? 1 : 0.15);
     v.label.element.style.opacity = on ? '' : '0.15';
-    v.label.element.classList.toggle('hl', id === focus);
+    v.label.element.classList.toggle('hl', id === focus || (!!edge && near.has(id)));
   }
   for (const r of view.edges) {
-    const on = !focus || r.e.from === focus || r.e.to === focus;
-    fadeTo(r.obj.material, on ? (focus ? 1 : r.base) : 0.04);
+    fadeTo(r.obj.material, edgeOn(r) ? (focus || edge ? 1 : r.base) : 0.04);
+    if (r.hit) setEdgeHot(r, r === hoveredEdge || r === selectedEdge);
   }
-  for (const p of view.particles) fadeTo(p.dot.material, !focus || p.edge.from === focus || p.edge.to === focus ? 1 : 0);
+  for (const p of view.particles) fadeTo(p.dot.material, edgeOn(p.rec) ? 1 : 0);
 }
 
 function ago(ms) {
@@ -879,8 +946,10 @@ function ago(ms) {
 
 function select(id) {
   selected = id;
+  selectedEdge = null;
   applyHighlight();
   const box = $('info');
+  box.classList.remove('wide');
   const v = id && view.nodes.get(id);
   if (!v) { box.classList.remove('open'); return; }
   const n = v.n, k = KINDS[n.kind] || KINDS.module;
@@ -889,7 +958,8 @@ function select(id) {
     const o = view.nodes.get(otherId)?.n;
     if (!o) return '';
     const rel = e.kind === 'via' ? `${e.label} (${e.path.join(' → ')})` : e.label || '';
-    return `<li><button data-go="${esc(otherId)}"><span class="sw" style="background:${hex((KINDS[o.kind] || KINDS.module).color)}"></span>${esc(o.label)} <span class="rel">${esc(rel)}</span></button></li>`;
+    const link = e.kind === 'api' ? `<button class="linkbtn" data-link="${esc(e.from + '>' + e.to)}" title="Что уходит в API и что приходит обратно">запрос ⇄ ответ</button>` : '';
+    return `<li><button data-go="${esc(otherId)}"><span class="sw" style="background:${hex((KINDS[o.kind] || KINDS.module).color)}"></span>${esc(o.label)} <span class="rel">${esc(rel)}</span></button>${link}</li>`;
   };
   const groups = {};
   for (const e of v.out) (groups[EDGES[e.kind].out] ||= []).push(item(e.to, e));
@@ -916,9 +986,98 @@ function select(id) {
   box.classList.add('open');
 }
 
+/* ---------- связь «запрос к API»: что уходит в API и что приходит обратно ---------- */
+
+// описания из openapi.json: `код` из Markdown показываем моноширинным
+const md = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
+
+// тип поля: string, integer, number (float), array<string>, ProcessRequest, string | null …
+function typeOf(s) {
+  if (!s) return 'любой';
+  if (s.type === 'variants') return s.variants.map(typeOf).join(' | ');
+  if (s.type === 'array') return `array<${s.items ? (s.items.ref || typeOf(s.items)) : 'любой'}>`;
+  const t = s.type || (s.properties ? 'object' : 'любой');
+  return t + (s.format ? ` (${s.format})` : '');
+}
+
+// поля схемы строками таблицы; вложенные объекты и элементы массивов — с отступом
+function fieldRows(list, depth = 0) {
+  return list.map((f) => {
+    const notes = [f.constraints, f.enum ? 'значения: ' + f.enum.map((x) => JSON.stringify(x)).join(', ') : null].filter(Boolean).join('; ');
+    const children = f.type === 'array' ? f.items?.properties : f.properties;
+    return `<tr><td style="padding-left:${depth * 14}px">${depth ? '<span class="rel">└ </span>' : ''}<code>${esc(f.name)}</code>${f.required ? '<span class="rq" title="обязательное">*</span>' : ''}` +
+      `${f.description ? `<div class="d">${md(f.description)}</div>` : ''}</td>` +
+      `<td class="t">${esc(typeOf(f))}${f.in ? `<div class="c">в ${esc(f.in === 'query' ? 'строке запроса' : f.in === 'path' ? 'адресе' : f.in)}</div>` : ''}${notes ? `<div class="c">${esc(notes)}</div>` : ''}</td></tr>` +
+      (children?.length && depth < 5 ? fieldRows(children, depth + 1) : '');
+  }).join('');
+}
+
+// тело запроса или ответа: тип содержимого, схема полями и пример
+function bodyHtml(b) {
+  if (!b) return '<p class="rel">Тела нет</p>';
+  const s = b.schema;
+  const fields = s?.properties?.length ? s.properties
+    : s?.type === 'array' && s.items?.properties?.length ? [{ name: '[ ]', type: 'array', items: s.items, description: 'массив элементов' }]
+    : null;
+  return `<p class="ct">${esc(b.contentType || '')}${s?.ref ? ` · схема <b>${esc(s.ref)}</b>` : ''}${s && !fields ? ` · ${esc(typeOf(s))}` : ''}${s?.description ? ` — ${md(s.description)}` : ''}</p>` +
+    (fields ? `<table class="fields">${fieldRows(fields)}</table>` : '') +
+    (b.example != null ? `<details class="ex"><summary>Пример</summary><pre>${esc(typeof b.example === 'string' ? b.example : JSON.stringify(b.example, null, 2))}</pre></details>` : '');
+}
+
+function contractHtml(op) {
+  const req = op.request || { params: [], body: null };
+  const ok = (r) => /^2/.test(r.status);
+  const response = (r) => `<details class="resp"${ok(r) ? ' open' : ''}><summary><span class="status s${r.status[0]}">${esc(r.status)}</span><span>${md(r.description || '')}</span></summary>
+    <div>${bodyHtml(r.body)}</div></details>`;
+  return `
+    <div class="op"><span class="method m-${op.method.toLowerCase()}">${op.method}</span><span>${esc(op.summary || op.operationId || '')}</span>
+      ${op.docs ? `<a href="${esc(op.docs)}" target="_blank" rel="noopener noreferrer">Swagger ↗</a>` : ''}</div>
+    <section class="dir" style="--c:${hex(EDGES.api.color)}">
+      <h4>→ Запрос · фронтенд → API</h4>
+      ${req.params.length ? `<p class="ct">Параметры</p><table class="fields">${fieldRows(req.params)}</table>` : ''}
+      ${req.body ? bodyHtml(req.body) : `<p class="rel">${req.params.length ? 'Тела нет' : 'Тело и параметры не передаются'}</p>`}
+    </section>
+    <section class="dir" style="--c:${hex(RESPONSE_COLOR)}">
+      <h4>← Ответ · API → фронтенд</h4>
+      ${(op.responses || []).map(response).join('') || '<p class="rel">Ответы не описаны</p>'}
+    </section>`;
+}
+
+function selectEdge(rec) {
+  selected = null;
+  selectedEdge = rec;
+  applyHighlight();
+  const box = $('info');
+  const e = rec.e, from = rec.a.n, route = rec.b.n;
+  const project = data.projects.find((p) => p.name === current);
+  const handler = project.edges.filter((x) => x.from === route.id && x.kind === 'route').map((x) => project.nodes.find((n) => n.id === x.to)?.label).filter(Boolean);
+  // показываем методы, которыми фронтенд вызывает адрес; если их не нашли в описании — все методы адреса
+  const ops = route.api || [];
+  const used = ops.filter((op) => (e.methods || []).includes(op.method));
+  box.innerHTML = `
+    <button class="close" aria-label="Закрыть">×</button>
+    <h3>${esc(e.label || route.label)}</h3>
+    <div class="kind"><span class="sw" style="display:inline-block;background:${hex(EDGES.api.color)}"></span> Запрос к API и ответ</div>
+    <div class="ends">
+      <span><button data-go="${esc(from.id)}">${esc(from.label)}</button><small>фронтенд · ${esc(from.service)}</small></span>
+      <span class="arrows"><span class="q">→ запрос</span><br><span class="a">ответ ←</span></span>
+      <span><button data-go="${esc(route.id)}">${esc(route.label)}</button><small>API · ${esc(route.service)}${handler.length ? ' · ' + esc(handler.join(', ')) : ''}</small></span>
+    </div>
+    <dl>
+      <dt>Метод</dt><dd>${esc((e.methods || ['GET']).join(', '))}</dd>
+      <dt>Вызов в коде</dt><dd>${esc(from.path)}</dd>
+    </dl>
+    ${(used.length ? used : ops).map(contractHtml).join('') ||
+      `<h4>Структура неизвестна</h4><p class="rel">Адреса ${esc(route.label)} нет в openapi.json сервиса ${esc(route.service)} — опишите его там, и здесь появятся запрос и ответ с типами.</p>`}`;
+  box.classList.add('open', 'wide');
+  box.scrollTop = 0;
+}
+
 $('info').addEventListener('click', (ev) => {
   const go = ev.target.closest('[data-go]');
-  if (go) focusNode(go.dataset.go);
+  const link = ev.target.closest('[data-link]');
+  if (link) { const rec = view.edges.find((r) => r.hit && r.e.from + '>' + r.e.to === link.dataset.link); if (rec) selectEdge(rec); }
+  else if (go) focusNode(go.dataset.go);
   else if (ev.target.closest('.close')) select(null);
 });
 function setRecentCollapsed(on) {
@@ -944,6 +1103,12 @@ function pick(ev) {
   ray.setFromCamera(pointer, camera);
   const hit = ray.intersectObjects([...view.nodes.values()].map((v) => v.mesh), false)[0];
   return hit?.object.userData.id || null;
+}
+// связь «запрос к API» под курсором; вызывается после pick — луч уже выставлен
+function pickEdge() {
+  if (!view) return null;
+  const hit = ray.intersectObjects(view.edges.filter((r) => r.hit).map((r) => r.hit), false)[0];
+  return hit?.object.userData.edge || null;
 }
 /* перетаскивание блока: он скользит по плоскости своего этажа (в 3D — горизонтально, в 2D — по экрану).
    Слушатель на родителе в фазе захвата срабатывает раньше OrbitControls и отключает вращение/сдвиг камеры. */
@@ -1011,8 +1176,9 @@ function endDrag() {
 renderer.domElement.addEventListener('pointermove', (ev) => {
   if (drag) return;
   const id = pick(ev);
-  renderer.domElement.style.cursor = id ? 'grab' : '';
-  if (id !== hovered) { hovered = id; applyHighlight(); }
+  const edge = id ? null : pickEdge();
+  renderer.domElement.style.cursor = id ? 'grab' : edge ? 'pointer' : '';
+  if (id !== hovered || edge !== hoveredEdge) { hovered = id; hoveredEdge = edge; applyHighlight(); }
 });
 // перетаскивание слушаем на всём окне: курсор может уйти на панель, а отпустить блок можно где угодно
 addEventListener('pointermove', (ev) => { if (drag) moveDragged(ev); });
@@ -1027,7 +1193,9 @@ $('resetLayout').onclick = () => {
 renderer.domElement.addEventListener('pointerdown', (ev) => { downAt = [ev.clientX, ev.clientY]; });
 renderer.domElement.addEventListener('pointerup', (ev) => {
   if (!downAt || Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]) > 5) return;
-  select(pick(ev));
+  const id = pick(ev);
+  const edge = id ? null : pickEdge();
+  if (edge) selectEdge(edge); else select(id);
 });
 addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { setLegendOpen(false); select(null); } });
 
@@ -1137,7 +1305,7 @@ function renderControls() {
 
 function rebuild(refit) {
   signature = '';
-  hovered = null;
+  hovered = hoveredEdge = null;
   show();
   if (refit) fitCamera();
 }
@@ -1195,13 +1363,18 @@ function show() {
     const first = !signature && !world;
     signature = sig;
     const keep = selected;
+    const keepEdge = selectedEdge && selectedEdge.e.from + '>' + selectedEdge.e.to;
+    hoveredEdge = null;
     build(p);
-    if (keep && view.nodes.has(keep)) select(keep); else select(null);
+    const edge = keepEdge && view.edges.find((r) => r.hit && r.e.from + '>' + r.e.to === keepEdge);
+    if (edge) selectEdge(edge); else if (keep && view.nodes.has(keep)) select(keep); else select(null);
     if (first) fitCamera();
     // /?node=<id>#проект — сразу открыть элемент (ссылка на элемент схемы, например с вики)
     if (nodeParam && view.nodes.has(nodeParam)) { focusNode(nodeParam); nodeParam = null; }
   } else {
     for (const n of p.nodes) { const v = view.nodes.get(n.id); if (v) v.n = n; }
+    // описание адреса в openapi.json могло поменяться — свежие данные связи из нового ответа
+    for (const r of view.edges) if (r.hit) r.e = p.edges.find((e) => e.from === r.e.from && e.to === r.e.to && e.kind === 'api') || r.e;
   }
   updateDocAlerts();
   updateRecent();
@@ -1247,7 +1420,7 @@ renderer.setAnimationLoop(() => {
   if (view) {
     for (const p of view.particles) {
       p.t = (p.t + dt * 0.25) % 1;
-      p.dot.position.copy(p.curve.getPoint(p.t));
+      p.dot.position.copy(p.curve.getPoint(p.back ? 1 - p.t : p.t));
     }
     const pulse = (Math.sin(performance.now() / 300) + 1) / 2;
     const alarm = (Math.sin(performance.now() / 420) + 1) / 2;   // свой ритм, чтобы не сливался с «недавно изменён»
@@ -1277,7 +1450,7 @@ renderer.setAnimationLoop(() => {
 });
 
 // доступ к состоянию схемы из консоли браузера — для отладки и автопроверок
-window.vizorDebug = { get view() { return view; }, get drag() { return drag; }, builds: 0 };
+window.vizorDebug = { get view() { return view; }, get drag() { return drag; }, get camera() { return camera; }, get selectedEdge() { return selectedEdge; }, builds: 0 };
 
 applyControls();
 pollArchitecture();
