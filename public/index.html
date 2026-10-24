@@ -422,7 +422,7 @@ function disposeWorld() {
   fades.clear();
   world.traverse((o) => {
     if (o.isCSS2DObject) o.element.remove();
-    if (o.geometry && !Object.values(GEOMS).includes(o.geometry)) o.geometry.dispose();
+    if (o.geometry && o.geometry !== GLOW_PLANE && !Object.values(GEOMS).includes(o.geometry)) o.geometry.dispose();
     if (o.material) o.material.dispose();
   });
   scene.remove(world);
@@ -802,22 +802,51 @@ function refreshEdge(rec) {
 // Кольцо повторяет основание блока: под кубами, высокими и плоскими блоками и пирамидами — квадратное, под шарами и цилиндрами — круглое.
 const OPEN_SCALE = 1.7;
 const ROUND_SHAPES = new Set(['ball', 'cyl']);
+
+// Размытая подсветка — плоскость GLOW_SIZE × GLOW_SIZE с текстурой, нарисованной на canvas: мягкий широкий ореол
+// и более чёткая сердцевина. Контур: круг радиусом 1.85 или квадрат с полустороной 1.65 — чуть шире увеличенного блока
+const GLOW_SIZE = 6, GLOW_PX = 256;
+const GLOW_PLANE = new THREE.PlaneGeometry(GLOW_SIZE, GLOW_SIZE);
+const glowTextures = {};
+function glowTexture(round) {
+  const key = round ? 'round' : 'square';
+  if (glowTextures[key]) return glowTextures[key];
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = GLOW_PX;
+  const ctx = cv.getContext('2d');
+  const px = GLOW_PX / GLOW_SIZE, mid = GLOW_PX / 2;
+  const outline = () => {
+    ctx.beginPath();
+    if (round) ctx.arc(mid, mid, 1.85 * px, 0, Math.PI * 2);
+    else ctx.roundRect(mid - 1.65 * px, mid - 1.65 * px, 3.3 * px, 3.3 * px, 0.35 * px);
+  };
+  ctx.strokeStyle = '#fff';
+  for (const [blur, width, alpha] of [[16, 0.6, 1], [16, 0.6, 1], [7, 0.3, 1], [2, 0.12, 1]]) {
+    ctx.filter = `blur(${blur}px)`;
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = width * px;
+    outline();
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return (glowTextures[key] = tex);
+}
 function setNodeOpen(v, on) {
   if (on === !!v.open) return;
   v.open = on;
   if (on) {
     const k = KINDS[v.n.kind] || KINDS.module;
     const round = ROUND_SHAPES.has(k.shape);
-    // у квадрата из 4 сегментов радиус — до угла: полустороны 1.6…2.1 → радиусы ×√2
-    const geom = round ? new THREE.RingGeometry(1.9, 2.5, 48) : new THREE.RingGeometry(1.6 * Math.SQRT2, 2.1 * Math.SQRT2, 4);
-    v.openRing = new THREE.Mesh(geom,
-      new THREE.MeshBasicMaterial({ color: k.color, transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    v.openRing = new THREE.Mesh(GLOW_PLANE, new THREE.MeshBasicMaterial({ color: k.color, map: glowTexture(round), transparent: true,
+      side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
     v.openRing.rotation.x = -Math.PI / 2;
-    if (!round) v.openRing.rotation.z = Math.PI / 4;   // ромб → квадрат вдоль сторон блока
     v.openRing.position.copy(v.localBase).setY(0.08);
+    // поверх полупрозрачных платформ и плиток папок, иначе в 3D они рисуются после подсветки и гасят её
+    v.openRing.renderOrder = 5;
     v.group.add(v.openRing);
   } else {
-    v.group.remove(v.openRing); v.openRing.geometry.dispose(); v.openRing.material.dispose(); v.openRing = null;
+    v.group.remove(v.openRing); v.openRing.material.dispose(); v.openRing = null;   // плоскость и текстура общие
     v.mesh.material.emissive.setHex(v.recent ? 0x5a4a00 : 0x000000);
   }
 }
@@ -829,6 +858,7 @@ function setEdgeGlow(rec, on) {
   if (on) {
     rec.glow = new THREE.Mesh(new THREE.TubeGeometry(rec.curve, 40, GLOW_RADIUS, 10),
       new THREE.MeshBasicMaterial({ color: EDGES.api.color, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false }));
+    rec.glow.renderOrder = 5;
     world.add(rec.glow);
   } else {
     world.remove(rec.glow);
@@ -1196,7 +1226,7 @@ function createCard(type, id, off = {}, size = 1) {
     <button class="close" aria-label="Закрыть">×</button></div><div class="card-body"></div>`;
   el.style.visibility = 'hidden';
   $('cards').append(el);
-  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(Array.from({ length: LEADER_POINTS + 1 }, () => new THREE.Vector3())),
     new THREE.LineBasicMaterial({ color: EDGES.api.color, transparent: true, opacity: 0.55 }));
   line.frustumCulled = false;
   cardLines.add(line);
@@ -1290,12 +1320,37 @@ function toScreen(p) {
   const v = p.clone().project(camera);
   return { x: (v.x + 1) / 2 * innerWidth, y: (1 - v.y) / 2 * innerHeight, behind: v.z > 1 };
 }
-// точка экрана → мир, на плоскости через point, развёрнутой к камере
+// точка экрана → мир, на плоскости через point, развёрнутой к камере (своя плоскость: dragPlane занят перетаскиванием блока)
+const cardPlane = new THREE.Plane();
 function screenToPlane(x, y, point) {
   pointer.set((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
   ray.setFromCamera(pointer, camera);
-  dragPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()), point);
-  return ray.ray.intersectPlane(dragPlane, new THREE.Vector3());
+  cardPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()), point);
+  return ray.ray.intersectPlane(cardPlane, new THREE.Vector3());
+}
+
+// Выноска от якоря к карточке — плавная кривая. Входит в ту сторону карточки, что обращена к якорю
+// (по большему зазору: слева/справа или сверху/снизу), в ближайшую к якорю точку этой стороны, перпендикулярно ей.
+const LEADER_POINTS = 40;
+const tmpLeader = new THREE.Vector3();
+function leaderCurve(c, mid, wp, p) {
+  const s = cardScale(wp) * c.size;
+  const r = { x0: p.x, y0: p.y, x1: p.x + c.el.offsetWidth * s, y1: p.y + c.el.offsetHeight * s };
+  const a = toScreen(mid);
+  const gapX = Math.max(r.x0 - a.x, a.x - r.x1, 0), gapY = Math.max(r.y0 - a.y, a.y - r.y1, 0);
+  if (!gapX && !gapY) return null;   // якорь под карточкой — линия не нужна
+  const inset = 18 * s;
+  const clampY = THREE.MathUtils.clamp(a.y, r.y0 + inset, Math.max(r.y0 + inset, r.y1 - inset));
+  const clampX = THREE.MathUtils.clamp(a.x, r.x0 + inset, Math.max(r.x0 + inset, r.x1 - inset));
+  let at;
+  if (gapX >= gapY) at = a.x < r.x0 ? [r.x0, clampY, -1, 0] : [r.x1, clampY, 1, 0];
+  else at = a.y < r.y0 ? [clampX, r.y0, 0, -1] : [clampX, r.y1, 0, 1];
+  // насколько далеко кривая выходит из стороны перпендикулярно: половина зазора, но не меньше 30 и не больше 160 px
+  const reach = THREE.MathUtils.clamp(Math.max(gapX, gapY) * 0.5, 30, 160);
+  const end = screenToPlane(at[0], at[1], wp);
+  const out = screenToPlane(at[0] + at[2] * reach, at[1] + at[3] * reach, wp);
+  if (!end || !out) return null;
+  return new THREE.CubicBezierCurve3(mid, mid.clone().lerp(out, 0.4), out, end);
 }
 
 // Место по умолчанию: справа от схемы (если там тесно — слева, иначе у края экрана) на высоте связи,
@@ -1383,10 +1438,13 @@ function updateCards() {
     const p = toScreen(wp);
     c.el.style.visibility = p.behind ? 'hidden' : '';
     c.el.style.transform = `translate(${p.x}px, ${p.y}px) scale(${cardScale(wp) * c.size})`;
-    const pos = c.line.geometry.attributes.position;
-    pos.setXYZ(0, mid.x, mid.y, mid.z); pos.setXYZ(1, wp.x, wp.y, wp.z);
-    pos.needsUpdate = true;
-    c.line.visible = !p.behind;
+    const curve = p.behind ? null : leaderCurve(c, mid, wp, p);
+    if (curve) {
+      const pos = c.line.geometry.attributes.position;
+      for (let i = 0; i <= LEADER_POINTS; i++) { curve.getPoint(i / LEADER_POINTS, tmpLeader); pos.setXYZ(i, tmpLeader.x, tmpLeader.y, tmpLeader.z); }
+      pos.needsUpdate = true;
+      c.line.visible = true;
+    }
     c.el.classList.toggle('hl', c.type === 'edge' ? hoveredEdge === c.target : hovered === c.id);
   }
 }
@@ -1512,7 +1570,10 @@ renderer.domElement.addEventListener('pointerup', (ev) => {
   if (!downAt || Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]) > 5) return;
   const id = pick(ev);
   const edge = id ? null : pickEdge();
-  if (edge) openCard('edge', edge); else if (id) openCard('node', view.nodes.get(id));
+  // повторный клик по элементу с открытой карточкой закрывает её
+  const key = edge ? 'edge:' + edgeKey(edge) : id ? 'node:' + id : null;
+  if (key && cards.has(key)) closeCard(key);
+  else if (edge) openCard('edge', edge); else if (id) openCard('node', view.nodes.get(id));
 });
 addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { setLegendOpen(false); closeTopCard(); } });
 
@@ -1767,8 +1828,8 @@ renderer.setAnimationLoop(() => {
       }
       if (v.open) {
         v.mesh.material.emissive.setHex((KINDS[v.n.kind] || KINDS.module).color).multiplyScalar(0.3 + glow * 0.35);
-        v.openRing.scale.setScalar(1 + glow * 0.25);
-        v.openRing.material.opacity = 0.85 - glow * 0.45;
+        v.openRing.scale.setScalar(1 + glow * 0.12);
+        v.openRing.material.opacity = 1 - glow * 0.4;
       }
       // дальние подписи прячем, чтобы не было каши из текста
       const far = (CELL * pxPerUnitAt1) / camera.position.distanceTo(v.base) < 55;
