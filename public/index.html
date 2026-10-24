@@ -69,27 +69,22 @@
   #recent .ago { color: var(--muted); margin-left: auto; white-space: nowrap; }
   #recent .empty { color: var(--muted); }
 
-  #info { top: 110px; right: 12px; width: 320px; max-height: calc(100vh - 110px - 40vh - 36px); overflow: auto; padding: 14px 16px; display: none; transition: max-height .3s ease; }
-  #recent.collapsed ~ #info { max-height: calc(100vh - 110px - 70px); }
-  #info.open { display: block; }
-  #info h3 { margin: 0 32px 2px 0; font-size: 16px; overflow-wrap: anywhere; }
-  #info .kind { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
-  #info .close { position: absolute; top: 8px; right: 8px; background: none; border: 0; font-size: 18px; color: var(--muted); }
-  #info dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 13px; }
-  #info dt { color: var(--muted); } #info dd { margin: 0; overflow-wrap: anywhere; }
-  #info h4 { margin: 12px 0 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
-  #info ul { list-style: none; margin: 0; padding: 0; }
-  #info li button { background: none; border: 0; padding: 2px 0; text-align: left; display: flex; gap: 8px; align-items: center; }
-  #info li button:hover { color: var(--recent); }
-  #info .rel { color: var(--muted); font-size: 11px; }
-  #info ul.api li { display: flex; gap: 10px; align-items: flex-start; padding: 4px 0; font-size: 13px; }
-  #info ul.api a, #info .doc a { color: #9cc0ff; font-weight: 600; }
-  #info .doc { margin: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
-  #info p.rel { margin: 0; }
+  .card .kind { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  .card dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 13px; }
+  .card dt { color: var(--muted); } .card dd { margin: 0; overflow-wrap: anywhere; }
+  .card h4 { margin: 12px 0 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+  .card ul { list-style: none; margin: 0; padding: 0; }
+  .card li button { background: none; border: 0; padding: 2px 0; text-align: left; display: flex; gap: 8px; align-items: center; }
+  .card li button:hover { color: var(--recent); }
+  .card .rel { color: var(--muted); font-size: 11px; }
+  .card ul.api li { display: flex; gap: 10px; align-items: flex-start; padding: 4px 0; font-size: 13px; }
+  .card ul.api a, .card .doc a { color: #9cc0ff; font-weight: 600; }
+  .card .doc { margin: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+  .card p.rel { margin: 0; }
   .method { font: 700 11px/1 ui-monospace, Consolas, monospace; padding: 4px 6px; border-radius: 5px; color: #0d1016; background: #9aa3b2; flex: none; margin-top: 1px; }
   .m-get { background: #61affe; } .m-post { background: #49cc90; } .m-put { background: #fca130; } .m-patch { background: #50e3c2; } .m-delete { background: #f93e3e; }
 
-  /* карточки связей «запрос к API»: висят в пространстве схемы рядом с ней, тащатся за шапку, открыто до пяти */
+  /* карточки связей «запрос к API» и блоков: висят в пространстве схемы рядом с ней, тащатся за шапку, открыто до пяти каждого вида */
   #cards { position: fixed; inset: 0; pointer-events: none; z-index: 5; overflow: hidden; }
   .card { position: absolute; left: 0; top: 0; width: 440px; transform-origin: 0 0; pointer-events: auto; display: flex; flex-direction: column;
           background: var(--panel); border: 1px solid var(--border); border-radius: 12px; backdrop-filter: blur(6px);
@@ -106,10 +101,8 @@
   .card-head .close { background: none; border: 0; font-size: 18px; line-height: 1; color: var(--muted); padding: 0 4px; }
   .card-head .close:hover { color: var(--text); }
   .card-body { padding: 10px 16px 14px; max-height: min(62vh, 640px); overflow: auto; overscroll-behavior: contain; }
-  .card h4 { margin: 12px 0 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
-  .card dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 13px; }
-  .card dt { color: var(--muted); } .card dd { margin: 0; overflow-wrap: anywhere; }
-  .card .rel { color: var(--muted); font-size: 11px; } .card p.rel { margin: 0; }
+  .card-node { width: 340px; }
+  .card-node .card-head { background: rgba(255, 255, 255, .03); }
   #toast { position: fixed; left: 50%; top: 110px; transform: translateX(-50%); padding: 8px 14px; font-size: 13px; z-index: 20;
            opacity: 0; transition: opacity .3s; pointer-events: none; }
   #toast.on { opacity: 1; }
@@ -144,9 +137,9 @@
   .card details.ex > summary { cursor: pointer; color: var(--muted); font-size: 11px; margin-top: 4px; }
   .card pre { margin: 4px 0 0; padding: 8px; border-radius: 8px; background: rgba(0, 0, 0, .3); border: 1px solid var(--border);
               font: 11.5px/1.45 ui-monospace, Consolas, monospace; overflow: auto; max-height: 220px; white-space: pre-wrap; overflow-wrap: anywhere; }
-  #info li .linkbtn { margin-left: auto; flex: none; background: none; border: 1px solid var(--border); border-radius: 6px; padding: 0 6px; font-size: 11px; color: #9cc0ff; }
-  #info li .linkbtn:hover { border-color: #9cc0ff; color: #9cc0ff; }
-  #info ul li:has(.linkbtn) { display: flex; align-items: center; gap: 6px; }
+  .card li .linkbtn { margin-left: auto; flex: none; background: none; border: 1px solid var(--border); border-radius: 6px; padding: 0 6px; font-size: 11px; color: #9cc0ff; }
+  .card li .linkbtn:hover { border-color: #9cc0ff; color: #9cc0ff; }
+  .card ul li:has(.linkbtn) { display: flex; align-items: center; gap: 6px; }
 
   /* подписи в сцене */
   .lbl { font-size: 11px; color: #cfd6e2; white-space: nowrap; text-shadow: 0 1px 3px #000, 0 0 2px #000; padding-top: 4px; transition: opacity .3s ease; }
@@ -180,7 +173,6 @@
     #legend.open { display: block; }
     #legend summary { pointer-events: none; list-style: none; }
     #legend summary::-webkit-details-marker { display: none; }
-    #info { left: 12px; width: auto; }
     #recent { left: 62px; width: auto; }
     #recent ul { max-height: calc(25vh - 40px); }
   }
@@ -218,7 +210,7 @@
     <path d="M7.6 7.7a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.2.9-1.2 1.7v.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="10" cy="14.6" r="1" fill="currentColor"/></svg>
 </button>
 <aside id="legend" class="panel">
-  <details open>
+  <details id="legendDetails">
     <summary>Как читать схему</summary>
     <h2 style="margin-top:8px">Блоки</h2>
     <ul id="kinds"></ul>
@@ -240,7 +232,6 @@
 </aside>
 
 <div id="cards"></div>
-<aside id="info" class="panel" aria-live="polite"></aside>
 <div id="toast" class="panel" role="status"></div>
 
 <script type="module">
@@ -369,7 +360,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 let data = null, signature = '', current = null;
 let world = null;          // THREE.Group текущего проекта
 let view = null;           // узлы, рёбра, платформы и бегущие точки текущей сцены
-let hovered = null, selected = null;
+let hovered = null;
 let hoveredEdge = null;   // связь «запрос к API» в фокусе: под курсором на схеме или под курсором её карточка
 let hoveredEdgeOnScene = null;
 let cardsOf = null;       // проект, чьи карточки сейчас открыты
@@ -800,10 +791,26 @@ function refreshEdge(rec) {
   rec.obj.geometry = edgeGeometry(rec.e.kind, curve, rec.hot);
   if (rec.e.kind === 'via') rec.obj.computeLineDistances();
   if (rec.hit) { rec.hit.geometry.dispose(); rec.hit.geometry = new THREE.TubeGeometry(curve, 24, 0.7, 6); }
+  if (rec.glow) { rec.glow.geometry.dispose(); rec.glow.geometry = new THREE.TubeGeometry(curve, 40, GLOW_RADIUS, 10); }
   for (const p of rec.dots) p.curve = curve;
 }
 
-// утолщение и подсветка связи под курсором или выбранной
+// ореол связи с открытой карточкой: широкая полупрозрачная трубка с аддитивным смешением
+const GLOW_RADIUS = 0.55;
+function setEdgeGlow(rec, on) {
+  if (on === !!rec.glow) return;
+  if (on) {
+    rec.glow = new THREE.Mesh(new THREE.TubeGeometry(rec.curve, 40, GLOW_RADIUS, 10),
+      new THREE.MeshBasicMaterial({ color: EDGES.api.color, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false }));
+    world.add(rec.glow);
+  } else {
+    world.remove(rec.glow);
+    rec.glow.geometry.dispose(); rec.glow.material.dispose();
+    rec.glow = null;
+  }
+}
+
+// утолщение и подсветка связи под курсором или с открытой карточкой
 function setEdgeHot(rec, hot) {
   if (rec.hot === hot) return;
   rec.hot = hot;
@@ -878,8 +885,8 @@ function applyControls() {
     ? { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
     : { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   $('hint').textContent = mode === '3d'
-    ? 'Тяните мышью — вращать, колесо — приблизить, правая кнопка — сдвинуть. Блок можно перетащить. Клик по блоку — подробности и связи, по жёлтой связи «запрос к API» — что уходит в API и что приходит обратно.'
-    : 'Тяните мышью — сдвинуть, колесо — приблизить. Блок можно перетащить. Клик по блоку — подробности и связи, по жёлтой связи «запрос к API» — что уходит в API и что приходит обратно.';
+    ? 'Тяните мышью — вращать, колесо — приблизить, правая кнопка — сдвинуть. Блок можно перетащить. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.'
+    : 'Тяните мышью — сдвинуть, колесо — приблизить. Блок можно перетащить. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.';
 }
 
 function fitCamera() {
@@ -914,7 +921,7 @@ function focusNode(id) {
   if (!v) return;
   const dir = mode === '3d' ? camera.position.clone().sub(controls.target).normalize() : new THREE.Vector3(0, 0, 1);
   flyTo(v.base, v.base.clone().add(dir.multiplyScalar(26)));
-  select(id);
+  openCard('node', v);
 }
 
 /* ---------- подсветка и подробности ---------- */
@@ -945,23 +952,30 @@ function stepFades(now) {
   }
 }
 
-// В фокусе либо блок (под курсором или выбранный) с его связями, либо одна связь «запрос к API» с её концами
+// В фокусе либо блок под курсором (на схеме или его карточка) с его связями, либо связь «запрос к API» с её концами.
+// Связи с открытыми карточками светятся всегда, их концы и блоки с открытыми карточками не гаснут.
 function applyHighlight() {
   if (!view) return;
-  hoveredEdge = hoveredCard?.rec || hoveredEdgeOnScene;
-  const edge = hovered ? null : hoveredEdge;
-  const focus = edge ? null : hovered || selected;
+  const openEdges = new Set(), keep = new Set();
+  for (const c of cards.values()) {
+    if (!c.target) continue;
+    if (c.type === 'edge') { openEdges.add(c.target); keep.add(c.target.e.from).add(c.target.e.to); } else keep.add(c.id);
+  }
+  hoveredEdge = hoveredCard?.type === 'edge' ? hoveredCard.target : hoveredEdgeOnScene;
+  const hoverNode = hovered || (hoveredCard?.type === 'node' ? hoveredCard.id : null);
+  const edge = hoverNode ? null : hoveredEdge;
+  const focus = edge ? null : hoverNode;
   const near = edge ? new Set([edge.e.from, edge.e.to]) : focus ? neighbours(focus) : null;
-  const edgeOn = (r) => (edge ? r === edge : !focus || r.e.from === focus || r.e.to === focus);
+  const edgeOn = (r) => openEdges.has(r) || (edge ? r === edge : !focus || r.e.from === focus || r.e.to === focus);
   for (const [id, v] of view.nodes) {
-    const on = !near || near.has(id);
+    const on = !near || near.has(id) || keep.has(id);
     fadeTo(v.mesh.material, on ? 1 : 0.15);
     v.label.element.style.opacity = on ? '' : '0.15';
-    v.label.element.classList.toggle('hl', id === focus || (!!edge && near.has(id)));
+    v.label.element.classList.toggle('hl', id === focus || (!!edge && near.has(id)) || keep.has(id));
   }
   for (const r of view.edges) {
-    fadeTo(r.obj.material, edgeOn(r) ? (focus || edge ? 1 : r.base) : 0.04);
-    if (r.hit) setEdgeHot(r, r === hoveredEdge || cards.has(edgeKey(r)));
+    fadeTo(r.obj.material, edgeOn(r) ? (focus || edge || openEdges.has(r) ? 1 : r.base) : 0.04);
+    if (r.hit) { setEdgeHot(r, r === hoveredEdge || openEdges.has(r)); setEdgeGlow(r, openEdges.has(r)); }
   }
   for (const p of view.particles) fadeTo(p.dot.material, edgeOn(p.rec) ? 1 : 0);
 }
@@ -974,12 +988,8 @@ function ago(ms) {
   return new Date(ms).toLocaleDateString();
 }
 
-function select(id) {
-  selected = id;
-  applyHighlight();
-  const box = $('info');
-  const v = id && view.nodes.get(id);
-  if (!v) { box.classList.remove('open'); return; }
+// содержимое карточки блока: что это, где лежит, документация, адреса в Swagger и связи
+function nodeHtml(v) {
   const n = v.n, k = KINDS[n.kind] || KINDS.module;
   const svc = data.projects.find((p) => p.name === current).services.find((s) => s.id === n.service);
   const item = (otherId, e) => {
@@ -992,9 +1002,7 @@ function select(id) {
   const groups = {};
   for (const e of v.out) (groups[EDGES[e.kind].out] ||= []).push(item(e.to, e));
   for (const e of v.in) (groups[EDGES[e.kind].in + (e.kind === 'via' ? ' (входящие)' : '')] ||= []).push(item(e.from, e));
-  box.innerHTML = `
-    <button class="close" aria-label="Закрыть">×</button>
-    <h3>${esc(n.label)}</h3>
+  return `
     <div class="kind"><span class="sw" style="display:inline-block;background:${hex(k.color)}"></span> ${k.name}</div>
     <dl>
       <dt>Слой</dt><dd>${FLOORS.find((f) => f.key === v.floor).short}</dd>
@@ -1011,7 +1019,6 @@ function select(id) {
       <span>${esc(a.summary || a.operationId || '')}${a.docs ? `<br><a href="${esc(a.docs)}" target="_blank" rel="noopener noreferrer">Открыть в Swagger ↗</a>` : ''}</span></li>`).join('')}</ul>`
       : n.kind === 'route' ? '<h4>Описание в Swagger</h4><p class="rel">Этого адреса нет в openapi.json сервиса</p>' : ''}
     ${Object.entries(groups).map(([t, items]) => `<h4>${t} · ${items.length}</h4><ul>${items.join('')}</ul>`).join('') || '<h4>Связей с видимыми слоями нет</h4>'}`;
-  box.classList.add('open');
 }
 
 /* ---------- связь «запрос к API»: что уходит в API и что приходит обратно ---------- */
@@ -1092,20 +1099,31 @@ function cardHtml(rec) {
       `<h4>Структура неизвестна</h4><p class="rel">Адреса ${esc(route.label)} нет в openapi.json сервиса ${esc(route.service)} — опишите его там, и здесь появятся запрос и ответ с типами.</p>`}`;
 }
 
-/* Карточка связи — объект пространства схемы: точка в мире = середина связи + сдвиг (свой для 2D и 3D).
+/* Карточки — объекты пространства схемы: связи «запрос к API» (type 'edge') и блока (type 'node').
+   Точка карточки в мире = её якорь (середина связи или верх блока) + сдвиг, свой для 2D и 3D.
    Каждый кадр точка проецируется на экран, карточка встаёт туда и чуть масштабируется с расстоянием до камеры;
-   тонкая линия тянется от середины связи к карточке. Карточки проекта и их сдвиги запоминаются в браузере. */
+   тонкая линия тянется от якоря к карточке. Открыто до MAX_CARDS карточек каждого типа; карточки проекта и их
+   сдвиги запоминаются в браузере. */
 const MAX_CARDS = 5;
-const cards = new Map();          // ключ связи «from>to» → { key, el, rec, off: { '2d': [x,y,z], '3d': … }, line, sig }
-const savedCards = loadPref('cards', {});   // { проект: [{ key, off }] }
+const cards = new Map();          // «тип:id» → { key, type, id, el, target, off: { '2d': [x,y,z], '3d': … }, line, sig }
+const savedCards = loadPref('cards', {});   // { проект: [{ type, id, off }] }
 const cardLines = new THREE.Group();
 scene.add(cardLines);
 let cardZ = 1, fitDistance = 100, hoveredCard = null, cardDrag = null;
 const edgeKey = (r) => r.e.from + '>' + r.e.to;
 const apiEdge = (key) => view?.edges.find((r) => r.hit && edgeKey(r) === key) || null;
+const targetOf = (type, id) => (type === 'edge' ? apiEdge(id) : view?.nodes.get(id) || null);
+const CARD_TYPE = {
+  edge: { many: 'связей', title: (r) => r.e.label || r.b.n.label, html: (r) => cardHtml(r), color: () => EDGES.api.color,
+          sig: (r) => JSON.stringify([r.e, r.b.n.api]), anchor: (r) => r.curve.getPoint(0.5) },
+  node: { many: 'блоков', title: (v) => v.n.label, html: (v) => nodeHtml(v), color: (v) => (KINDS[v.n.kind] || KINDS.module).color,
+          // «изменён N мин назад» устаревает — раз в минуту карточка перерисовывается
+          sig: (v) => JSON.stringify([v.n, v.out.map((e) => [e.to, e.kind, e.label]), v.in.map((e) => [e.from, e.kind, e.label]), Math.floor(Date.now() / 60000)]),
+          anchor: (v) => v.anchor.clone() },
+};
 
 function saveCards() {
-  savedCards[current] = [...cards.values()].map((c) => ({ key: c.key, off: c.off }));
+  savedCards[current] = [...cards.values()].map((c) => ({ type: c.type, id: c.id, off: c.off }));
   savePref('cards', savedCards);
   $('closeCards').hidden = !cards.size;
   $('closeCards').textContent = `Закрыть детали (${cards.size})`;
@@ -1119,24 +1137,30 @@ function toast(text) {
 }
 
 function renderCard(c) {
-  const sig = JSON.stringify([c.rec.e, c.rec.b.n.api]);
+  const t = CARD_TYPE[c.type], sig = t.sig(c.target);
   if (sig === c.sig) return;
   c.sig = sig;
   const body = c.el.querySelector('.card-body'), top = body.scrollTop;
-  c.el.querySelector('.card-head b').textContent = c.rec.e.label || c.rec.b.n.label;
-  body.innerHTML = cardHtml(c.rec);
+  c.el.querySelector('.card-head b').textContent = t.title(c.target);
+  c.el.querySelector('.no').style.background = hex(t.color(c.target));
+  c.line.material.color.setHex(t.color(c.target));
+  body.innerHTML = t.html(c.target);
   body.scrollTop = top;
 }
 
+// номера — по порядку открытия, отдельно у карточек связей и у карточек блоков
 function numberCards() {
-  [...cards.values()].forEach((c, i) => { c.el.querySelector('.no').textContent = i + 1; });
+  for (const type of Object.keys(CARD_TYPE)) {
+    [...cards.values()].filter((c) => c.type === type).forEach((c, i) => { c.el.querySelector('.no').textContent = i + 1; });
+  }
 }
 
 function raiseCard(c) { c.el.style.zIndex = ++cardZ; }
 
-function createCard(key, off = {}) {
+function createCard(type, id, off = {}) {
+  const key = type + ':' + id;
   const el = document.createElement('div');
-  el.className = 'card';
+  el.className = 'card card-' + type;
   el.innerHTML = `<div class="card-head" title="Перетащите, чтобы отвести в сторону"><span class="no"></span><b></b>
     <span class="grip">⠿ тащить</span><button class="close" aria-label="Закрыть">×</button></div><div class="card-body"></div>`;
   el.style.visibility = 'hidden';
@@ -1145,14 +1169,16 @@ function createCard(key, off = {}) {
     new THREE.LineBasicMaterial({ color: EDGES.api.color, transparent: true, opacity: 0.55 }));
   line.frustumCulled = false;
   cardLines.add(line);
-  const c = { key, el, rec: null, off, line, sig: '' };
+  const c = { key, type, id, el, target: null, off, line, sig: '' };
   cards.set(key, c);
   el.addEventListener('pointerdown', () => raiseCard(c));
   el.addEventListener('pointerenter', () => { hoveredCard = c; applyHighlight(); });
   el.addEventListener('pointerleave', () => { if (hoveredCard === c) { hoveredCard = null; applyHighlight(); } });
   el.addEventListener('click', (ev) => {
     const go = ev.target.closest('[data-go]');
+    const link = ev.target.closest('[data-link]');
     if (ev.target.closest('.close')) closeCard(key);
+    else if (link) { const rec = apiEdge(link.dataset.link); if (rec) openCard('edge', rec); }
     else if (go) focusNode(go.dataset.go);
   });
   el.querySelector('.card-head').addEventListener('pointerdown', (ev) => startCardDrag(ev, c));
@@ -1173,18 +1199,19 @@ function closeCard(key) {
   applyHighlight();
 }
 
-// клик по связи: открыть карточку; уже открытую — поднять и мигнуть; шестая закрывает самую старую
-function openCard(rec) {
-  const key = edgeKey(rec);
-  let c = cards.get(key);
+// клик по связи или блоку: открыть карточку; уже открытую — поднять и мигнуть; шестая того же типа закрывает самую раннюю
+function openCard(type, target) {
+  const id = type === 'edge' ? edgeKey(target) : target.n.id;
+  let c = cards.get(type + ':' + id);
   if (!c) {
-    if (cards.size >= MAX_CARDS) {
-      const oldest = cards.keys().next().value;
-      toast(`Открыто не больше ${MAX_CARDS} карточек — закрыл самую раннюю: ${cards.get(oldest).rec?.e.label || oldest}`);
-      closeCard(oldest);
+    const same = [...cards.values()].filter((x) => x.type === type);
+    if (same.length >= MAX_CARDS) {
+      const oldest = same[0];
+      toast(`Открыто не больше ${MAX_CARDS} карточек ${CARD_TYPE[type].many} — закрыл самую раннюю: ${oldest.target ? CARD_TYPE[type].title(oldest.target) : oldest.id}`);
+      closeCard(oldest.key);
     }
-    c = createCard(key);
-    c.rec = rec;
+    c = createCard(type, id);
+    c.target = target;
     renderCard(c);
     numberCards();
     saveCards();
@@ -1194,23 +1221,25 @@ function openCard(rec) {
   applyHighlight();
 }
 
-// после перестройки схемы карточки находят свою связь заново; связь скрыта слоем — карточка прячется до её возвращения
+// после перестройки схемы карточки находят свою связь или блок заново; скрыт слоем — карточка прячется до его возвращения
 function bindCards() {
   for (const c of cards.values()) {
-    c.rec = apiEdge(c.key);
-    if (c.rec) renderCard(c);
+    c.target = targetOf(c.type, c.id);
+    if (c.target) renderCard(c);
   }
 }
 // при смене проекта — карточки этого проекта из сохранённых
 function restoreCards() {
   for (const key of [...cards.keys()]) { const c = cards.get(key); c.el.remove(); cardLines.remove(c.line); cards.delete(key); }
-  for (const s of (savedCards[current] || []).slice(-MAX_CARDS)) createCard(s.key, s.off || {});
+  // старый формат { key, off } — карточки связей
+  const saved = (savedCards[current] || []).map((s) => (s.type ? s : { type: 'edge', id: s.key, off: s.off }));
+  for (const type of Object.keys(CARD_TYPE)) for (const s of saved.filter((x) => x.type === type).slice(-MAX_CARDS)) createCard(type, s.id, s.off || {});
   bindCards();
   numberCards();
   saveCards();
 }
 
-const cardMid = (c) => c.rec.curve.getPoint(0.5);
+const cardMid = (c) => CARD_TYPE[c.type].anchor(c.target);
 const cardScale = (p) => THREE.MathUtils.clamp(fitDistance / camera.position.distanceTo(p), 0.6, 1);
 function toScreen(p) {
   const v = p.clone().project(camera);
@@ -1243,7 +1272,7 @@ function autoPlace(c) {
   const y0 = THREE.MathUtils.clamp(toScreen(mid).y - 40, top, Math.max(top, innerHeight - 12 - h));
   // свободное место ищем колонками: от выбранной — поочерёдно влево и вправо, но только в пределах экрана
   const others = [...cards.values()].filter((o) => o !== c && o.placed).map((o) => o.el.getBoundingClientRect())
-    .concat(['legend', 'recent', 'info', 'legendBtn'].map((id) => $(id).getBoundingClientRect()).filter((r) => r.width && r.height));
+    .concat(['legend', 'recent', 'legendBtn'].map((id) => $(id).getBoundingClientRect()).filter((r) => r.width && r.height));
   // длинная карточка может уходить за нижний край (её тело прокручивается) — важно, чтобы было видно хотя бы MIN_SEEN
   const MIN_SEEN = 240;
   const seen = (y) => Math.min(h, innerHeight - 12 - y);
@@ -1272,7 +1301,7 @@ function autoPlace(c) {
 }
 
 function startCardDrag(ev, c) {
-  if (ev.button !== 0 || ev.target.closest('.close') || !c.rec || !c.off[mode]) return;
+  if (ev.button !== 0 || ev.target.closest('.close') || !c.target || !c.off[mode]) return;
   ev.preventDefault();
   const wp = cardMid(c).add(new THREE.Vector3().fromArray(c.off[mode]));
   const hit = screenToPlane(ev.clientX, ev.clientY, wp);
@@ -1299,7 +1328,7 @@ addEventListener('pointercancel', endCardDrag);
 // каждый кадр: карточки — к своим точкам в пространстве, линии — от середины связи к карточке
 function updateCards() {
   for (const c of cards.values()) {
-    const show = !!c.rec && !!world;
+    const show = !!c.target && !!world;
     if (show && !c.off[mode] && !flight) autoPlace(c);
     c.placed = show && !!c.off[mode];
     c.line.visible = false;
@@ -1313,18 +1342,16 @@ function updateCards() {
     pos.setXYZ(0, mid.x, mid.y, mid.z); pos.setXYZ(1, wp.x, wp.y, wp.z);
     pos.needsUpdate = true;
     c.line.visible = !p.behind;
-    c.el.classList.toggle('hl', hoveredEdge === c.rec);
+    c.el.classList.toggle('hl', c.type === 'edge' ? hoveredEdge === c.target : hovered === c.id);
   }
 }
 $('closeCards').onclick = () => { for (const key of [...cards.keys()]) closeCard(key); };
 
-$('info').addEventListener('click', (ev) => {
-  const go = ev.target.closest('[data-go]');
-  const link = ev.target.closest('[data-link]');
-  if (link) { const rec = apiEdge(link.dataset.link); if (rec) openCard(rec); }
-  else if (go) focusNode(go.dataset.go);
-  else if (ev.target.closest('.close')) select(null);
-});
+// Esc закрывает верхнюю карточку
+function closeTopCard() {
+  const top = [...cards.values()].sort((a, b) => b.el.style.zIndex - a.el.style.zIndex)[0];
+  if (top) closeCard(top.key);
+}
 function setRecentCollapsed(on) {
   $('recent').classList.toggle('collapsed', on);
   $('recentToggle').setAttribute('aria-expanded', String(!on));
@@ -1336,7 +1363,7 @@ $('recentList').addEventListener('click', (ev) => {
   const go = ev.target.closest('[data-go]');
   if (go) focusNode(go.dataset.go);
 });
-$('home').onclick = () => { select(null); fitCamera(); };
+$('home').onclick = () => fitCamera();
 
 const ray = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -1440,9 +1467,15 @@ renderer.domElement.addEventListener('pointerup', (ev) => {
   if (!downAt || Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]) > 5) return;
   const id = pick(ev);
   const edge = id ? null : pickEdge();
-  if (edge) openCard(edge); else select(id);
+  if (edge) openCard('edge', edge); else if (id) openCard('node', view.nodes.get(id));
 });
-addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { setLegendOpen(false); select(null); } });
+addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { setLegendOpen(false); closeTopCard(); } });
+
+// «Как читать схему» по умолчанию свёрнуто; на широком экране раскрытие запоминается
+$('legendDetails').open = loadPref('legendOpen', false);
+$('legendDetails').addEventListener('toggle', () => {
+  if (getComputedStyle($('legendBtn')).display === 'none') savePref('legendOpen', $('legendDetails').open);
+});
 
 // на узком экране легенда открывается значком и закрывается им же, кликом мимо или Esc
 function setLegendOpen(on) {
@@ -1561,7 +1594,6 @@ $('tabs').addEventListener('click', (ev) => {
   current = b.dataset.p;
   savePref('project', current);
   location.hash = encodeURIComponent(current);
-  select(null);
   rebuild(true);
 });
 $('modeSeg').addEventListener('click', (ev) => {
@@ -1607,11 +1639,10 @@ function show() {
   if (sig !== signature) {
     const first = !signature && !world;
     signature = sig;
-    const keep = selected;
     hoveredEdge = hoveredEdgeOnScene = null;
     build(p);
     if (cardsOf !== current) { cardsOf = current; restoreCards(); } else bindCards();
-    if (keep && view.nodes.has(keep)) select(keep); else select(null);
+    applyHighlight();
     if (first) fitCamera();
     // /?node=<id>#проект — сразу открыть элемент (ссылка на элемент схемы, например с вики)
     if (nodeParam && view.nodes.has(nodeParam)) { focusNode(nodeParam); nodeParam = null; }
@@ -1620,6 +1651,7 @@ function show() {
     // описание адреса в openapi.json могло поменяться — свежие данные связи из нового ответа
     for (const r of view.edges) if (r.hit) r.e = p.edges.find((e) => e.from === r.e.from && e.to === r.e.to && e.kind === 'api') || r.e;
     bindCards();
+    applyHighlight();
   }
   updateDocAlerts();
   updateRecent();
@@ -1669,6 +1701,8 @@ renderer.setAnimationLoop(() => {
     }
     const pulse = (Math.sin(performance.now() / 300) + 1) / 2;
     const alarm = (Math.sin(performance.now() / 420) + 1) / 2;   // свой ритм, чтобы не сливался с «недавно изменён»
+    const glow = (Math.sin(performance.now() / 650) + 1) / 2;
+    for (const r of view.edges) if (r.glow) r.glow.material.opacity = 0.12 + glow * 0.16;
     // подпись видна, когда ячейка блока на экране шире ~55 px
     const pxPerUnitAt1 = innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
     for (const v of view.nodes.values()) {
@@ -1681,7 +1715,7 @@ renderer.setAnimationLoop(() => {
       }
       // дальние подписи прячем, чтобы не было каши из текста
       const far = (CELL * pxPerUnitAt1) / camera.position.distanceTo(v.base) < 55;
-      v.label.visible = !far || v.n.id === hovered || v.n.id === selected || !!v.ring;
+      v.label.visible = !far || v.n.id === hovered || cards.has('node:' + v.n.id) || !!v.ring;
     }
     // подпись папки не шире своей плитки на экране
     for (const c of view.clusters) {
@@ -1696,7 +1730,7 @@ renderer.setAnimationLoop(() => {
 });
 
 // доступ к состоянию схемы из консоли браузера — для отладки и автопроверок
-window.vizorDebug = { get view() { return view; }, get drag() { return drag; }, get camera() { return camera; }, get cards() { return [...cards.values()]; }, builds: 0 };
+window.vizorDebug = { get view() { return view; }, get drag() { return drag; }, get camera() { return camera; }, get cards() { return [...cards.values()]; }, openNode: (id) => focusNode(id), builds: 0 };
 
 applyControls();
 pollArchitecture();
