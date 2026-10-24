@@ -89,37 +89,60 @@
   .method { font: 700 11px/1 ui-monospace, Consolas, monospace; padding: 4px 6px; border-radius: 5px; color: #0d1016; background: #9aa3b2; flex: none; margin-top: 1px; }
   .m-get { background: #61affe; } .m-post { background: #49cc90; } .m-put { background: #fca130; } .m-patch { background: #50e3c2; } .m-delete { background: #f93e3e; }
 
-  /* панель связи «запрос к API»: запрос туда, ответы обратно, поля с типами */
-  #info.wide { width: 460px; max-height: calc(100vh - 110px - 70px); }
-  #info .ends { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; margin: 4px 0 10px; font-size: 13px; }
-  #info .ends > span { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); overflow-wrap: anywhere; }
-  #info .ends > span small { display: block; color: var(--muted); font-size: 11px; }
-  #info .ends button { background: none; border: 0; padding: 0; text-align: left; font-weight: 600; }
-  #info .ends button:hover { color: var(--recent); }
-  #info .ends .arrows { color: var(--muted); font-size: 15px; line-height: 1.1; text-align: center; border: 0; padding: 0; }
-  #info .ends .arrows .q { color: #ffd166; } #info .ends .arrows .a { color: #5ee0a0; }
-  #info .op { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0 4px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 13px; }
-  #info .op a { color: #9cc0ff; font-weight: 600; white-space: nowrap; margin-left: auto; }
-  #info .dir { border-left: 3px solid var(--c); padding: 2px 0 2px 10px; margin: 8px 0; }
-  #info .dir > h4 { margin-top: 2px; color: var(--c); }
-  #info .dir .ct { color: var(--muted); font-size: 11px; margin: 0 0 4px; }
-  #info table.fields { width: 100%; border-collapse: collapse; font-size: 12px; margin: 2px 0 4px; }
-  #info table.fields td { padding: 4px 6px 4px 0; vertical-align: top; border-top: 1px solid rgba(43, 50, 64, .7); }
-  #info .dir code { font: 11.5px ui-monospace, Consolas, monospace; color: var(--text); }
-  #info table.fields code { font: 600 12px ui-monospace, Consolas, monospace; color: var(--text); }
-  #info table.fields .rq { color: var(--bad); margin-left: 2px; font-weight: 700; }
-  #info table.fields .d, #info table.fields .c { color: var(--muted); font-size: 11px; }
-  #info table.fields td.t { white-space: nowrap; text-align: right; font: 12px ui-monospace, Consolas, monospace; color: #9cc0ff; }
-  #info table.fields td.t .c { font-family: inherit; }
-  #info .status { font: 700 11px/1 ui-monospace, Consolas, monospace; padding: 3px 6px; border-radius: 5px; color: #0d1016; background: #9aa3b2; }
-  #info .status.s2 { background: #5ee0a0; } #info .status.s4 { background: #fca130; } #info .status.s5 { background: #f0605d; }
-  #info details.resp { margin: 6px 0; }
-  #info details.resp > summary { cursor: pointer; display: flex; gap: 8px; align-items: center; font-size: 13px; list-style: none; }
-  #info details.resp > summary::before { content: "▸"; color: var(--muted); font-size: 11px; transition: transform .2s; }
-  #info details.resp[open] > summary::before { transform: rotate(90deg); }
-  #info details.resp > div { padding: 4px 0 0 18px; }
-  #info details.ex > summary { cursor: pointer; color: var(--muted); font-size: 11px; margin-top: 4px; }
-  #info pre { margin: 4px 0 0; padding: 8px; border-radius: 8px; background: rgba(0, 0, 0, .3); border: 1px solid var(--border);
+  /* карточки связей «запрос к API»: висят в пространстве схемы рядом с ней, тащатся за шапку, открыто до пяти */
+  #cards { position: fixed; inset: 0; pointer-events: none; z-index: 5; overflow: hidden; }
+  .card { position: absolute; left: 0; top: 0; width: 440px; transform-origin: 0 0; pointer-events: auto; display: flex; flex-direction: column;
+          background: var(--panel); border: 1px solid var(--border); border-radius: 12px; backdrop-filter: blur(6px);
+          box-shadow: 0 10px 30px rgba(0, 0, 0, .45); transition: border-color .2s, box-shadow .2s; }
+  .card.hl { border-color: #ffd166; box-shadow: 0 0 0 1px #ffd166, 0 10px 30px rgba(0, 0, 0, .45); }
+  .card.flash { animation: flash .9s ease 2; }
+  @keyframes flash { 50% { border-color: #ffd166; box-shadow: 0 0 0 3px rgba(255, 209, 102, .55), 0 10px 30px rgba(0, 0, 0, .45); } }
+  .card-head { display: flex; align-items: center; gap: 8px; padding: 9px 10px 9px 14px; cursor: grab; user-select: none; touch-action: none;
+               border-bottom: 1px solid var(--border); border-radius: 12px 12px 0 0; background: rgba(255, 209, 102, .06); }
+  .card.dragging .card-head { cursor: grabbing; }
+  .card-head .no { font: 700 11px/1 ui-monospace, Consolas, monospace; color: #0d1016; background: #ffd166; border-radius: 5px; padding: 3px 6px; }
+  .card-head b { font-size: 15px; overflow-wrap: anywhere; }
+  .card-head .grip { color: var(--muted); font-size: 11px; margin-left: auto; white-space: nowrap; }
+  .card-head .close { background: none; border: 0; font-size: 18px; line-height: 1; color: var(--muted); padding: 0 4px; }
+  .card-head .close:hover { color: var(--text); }
+  .card-body { padding: 10px 16px 14px; max-height: min(62vh, 640px); overflow: auto; overscroll-behavior: contain; }
+  .card h4 { margin: 12px 0 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+  .card dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 13px; }
+  .card dt { color: var(--muted); } .card dd { margin: 0; overflow-wrap: anywhere; }
+  .card .rel { color: var(--muted); font-size: 11px; } .card p.rel { margin: 0; }
+  #toast { position: fixed; left: 50%; top: 110px; transform: translateX(-50%); padding: 8px 14px; font-size: 13px; z-index: 20;
+           opacity: 0; transition: opacity .3s; pointer-events: none; }
+  #toast.on { opacity: 1; }
+  #closeCards { background: none; border: 1px solid #ffd166; color: #ffd166; border-radius: 8px; padding: 3px 10px; }
+  .card .ends { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; margin: 4px 0 10px; font-size: 13px; }
+  .card .ends > span { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); overflow-wrap: anywhere; }
+  .card .ends > span small { display: block; color: var(--muted); font-size: 11px; }
+  .card .ends button { background: none; border: 0; padding: 0; text-align: left; font-weight: 600; }
+  .card .ends button:hover { color: var(--recent); }
+  .card .ends .arrows { color: var(--muted); font-size: 15px; line-height: 1.1; text-align: center; border: 0; padding: 0; }
+  .card .ends .arrows .q { color: #ffd166; } .card .ends .arrows .a { color: #5ee0a0; }
+  .card .op { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0 4px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 13px; }
+  .card .op a { color: #9cc0ff; font-weight: 600; white-space: nowrap; margin-left: auto; }
+  .card .dir { border-left: 3px solid var(--c); padding: 2px 0 2px 10px; margin: 8px 0; }
+  .card .dir > h4 { margin-top: 2px; color: var(--c); }
+  .card .dir .ct { color: var(--muted); font-size: 11px; margin: 0 0 4px; }
+  .card table.fields { width: 100%; border-collapse: collapse; font-size: 12px; margin: 2px 0 4px; }
+  .card table.fields td { padding: 4px 6px 4px 0; vertical-align: top; border-top: 1px solid rgba(43, 50, 64, .7); }
+  .card .dir code { font: 11.5px ui-monospace, Consolas, monospace; color: var(--text); }
+  .card table.fields code { font: 600 12px ui-monospace, Consolas, monospace; color: var(--text); }
+  .card table.fields .rq { color: var(--bad); margin-left: 2px; font-weight: 700; }
+  .card table.fields .d, .card table.fields .c { color: var(--muted); font-size: 11px; }
+  .card table.fields td.t { white-space: nowrap; text-align: right; font: 12px ui-monospace, Consolas, monospace; color: #9cc0ff; }
+  .card table.fields td.t .c { font-family: inherit; }
+  .card .status { font: 700 11px/1 ui-monospace, Consolas, monospace; padding: 3px 6px; border-radius: 5px; color: #0d1016; background: #9aa3b2; }
+  .card .status.s2 { background: #5ee0a0; } .card .status.s4 { background: #fca130; } .card .status.s5 { background: #f0605d; }
+  .card details.resp { margin: 6px 0; }
+  .card details.resp > summary { cursor: pointer; display: flex; gap: 8px; align-items: center; font-size: 13px; list-style: none; }
+  .card details.resp > summary::before { content: "▸"; color: var(--muted); font-size: 11px; transition: transform .2s; }
+  .card details.resp[open] > summary::before { transform: rotate(90deg); }
+  .card details.resp > div { padding: 4px 0 0 18px; }
+  .card details.ex > summary { cursor: pointer; color: var(--muted); font-size: 11px; margin-top: 4px; }
+  .card pre { margin: 4px 0 0; padding: 8px; border-radius: 8px; background: rgba(0, 0, 0, .3); border: 1px solid var(--border);
               font: 11.5px/1.45 ui-monospace, Consolas, monospace; overflow: auto; max-height: 220px; white-space: pre-wrap; overflow-wrap: anywhere; }
   #info li .linkbtn { margin-left: auto; flex: none; background: none; border: 1px solid var(--border); border-radius: 6px; padding: 0 6px; font-size: 11px; color: #9cc0ff; }
   #info li .linkbtn:hover { border-color: #9cc0ff; color: #9cc0ff; }
@@ -185,6 +208,7 @@
   <span class="meta">
     <span id="updated">—</span>
     <button id="home">Общий вид</button>
+    <button id="closeCards" hidden title="Закрыть все карточки запросов">Закрыть детали</button>
     <button id="resetLayout" title="Вернуть перетащенные блоки этого проекта на места по умолчанию">Сбросить расположение</button>
   </span>
 </header>
@@ -215,7 +239,9 @@
   </div></div>
 </aside>
 
+<div id="cards"></div>
 <aside id="info" class="panel" aria-live="polite"></aside>
+<div id="toast" class="panel" role="status"></div>
 
 <script type="module">
 import * as THREE from 'three';
@@ -344,7 +370,9 @@ let data = null, signature = '', current = null;
 let world = null;          // THREE.Group текущего проекта
 let view = null;           // узлы, рёбра, платформы и бегущие точки текущей сцены
 let hovered = null, selected = null;
-let hoveredEdge = null, selectedEdge = null;   // связь «запрос к API» под курсором и открытая в панели
+let hoveredEdge = null;   // связь «запрос к API» в фокусе: под курсором на схеме или под курсором её карточка
+let hoveredEdgeOnScene = null;
+let cardsOf = null;       // проект, чьи карточки сейчас открыты
 let status = {};
 
 /* ---------- раскладка ---------- */
@@ -871,6 +899,7 @@ function fitCamera() {
     r = (Math.max(size.y, (size.x + LABEL_W) / camera.aspect) / 2 / Math.tan(fov / 2)) * 1.12 + 6;
     pos = new THREE.Vector3(center.x, center.y, center.z + r);
   }
+  fitDistance = pos.distanceTo(center);
   scene.fog.near = r * 1.6;
   scene.fog.far = r * 4;
   flyTo(center, pos);
@@ -919,7 +948,8 @@ function stepFades(now) {
 // В фокусе либо блок (под курсором или выбранный) с его связями, либо одна связь «запрос к API» с её концами
 function applyHighlight() {
   if (!view) return;
-  const edge = hovered ? null : hoveredEdge || (selected ? null : selectedEdge);
+  hoveredEdge = hoveredCard?.rec || hoveredEdgeOnScene;
+  const edge = hovered ? null : hoveredEdge;
   const focus = edge ? null : hovered || selected;
   const near = edge ? new Set([edge.e.from, edge.e.to]) : focus ? neighbours(focus) : null;
   const edgeOn = (r) => (edge ? r === edge : !focus || r.e.from === focus || r.e.to === focus);
@@ -931,7 +961,7 @@ function applyHighlight() {
   }
   for (const r of view.edges) {
     fadeTo(r.obj.material, edgeOn(r) ? (focus || edge ? 1 : r.base) : 0.04);
-    if (r.hit) setEdgeHot(r, r === hoveredEdge || r === selectedEdge);
+    if (r.hit) setEdgeHot(r, r === hoveredEdge || cards.has(edgeKey(r)));
   }
   for (const p of view.particles) fadeTo(p.dot.material, edgeOn(p.rec) ? 1 : 0);
 }
@@ -946,10 +976,8 @@ function ago(ms) {
 
 function select(id) {
   selected = id;
-  selectedEdge = null;
   applyHighlight();
   const box = $('info');
-  box.classList.remove('wide');
   const v = id && view.nodes.get(id);
   if (!v) { box.classList.remove('open'); return; }
   const n = v.n, k = KINDS[n.kind] || KINDS.module;
@@ -1043,21 +1071,14 @@ function contractHtml(op) {
     </section>`;
 }
 
-function selectEdge(rec) {
-  selected = null;
-  selectedEdge = rec;
-  applyHighlight();
-  const box = $('info');
+function cardHtml(rec) {
   const e = rec.e, from = rec.a.n, route = rec.b.n;
   const project = data.projects.find((p) => p.name === current);
   const handler = project.edges.filter((x) => x.from === route.id && x.kind === 'route').map((x) => project.nodes.find((n) => n.id === x.to)?.label).filter(Boolean);
   // показываем методы, которыми фронтенд вызывает адрес; если их не нашли в описании — все методы адреса
   const ops = route.api || [];
   const used = ops.filter((op) => (e.methods || []).includes(op.method));
-  box.innerHTML = `
-    <button class="close" aria-label="Закрыть">×</button>
-    <h3>${esc(e.label || route.label)}</h3>
-    <div class="kind"><span class="sw" style="display:inline-block;background:${hex(EDGES.api.color)}"></span> Запрос к API и ответ</div>
+  return `
     <div class="ends">
       <span><button data-go="${esc(from.id)}">${esc(from.label)}</button><small>фронтенд · ${esc(from.service)}</small></span>
       <span class="arrows"><span class="q">→ запрос</span><br><span class="a">ответ ←</span></span>
@@ -1069,14 +1090,238 @@ function selectEdge(rec) {
     </dl>
     ${(used.length ? used : ops).map(contractHtml).join('') ||
       `<h4>Структура неизвестна</h4><p class="rel">Адреса ${esc(route.label)} нет в openapi.json сервиса ${esc(route.service)} — опишите его там, и здесь появятся запрос и ответ с типами.</p>`}`;
-  box.classList.add('open', 'wide');
-  box.scrollTop = 0;
 }
+
+/* Карточка связи — объект пространства схемы: точка в мире = середина связи + сдвиг (свой для 2D и 3D).
+   Каждый кадр точка проецируется на экран, карточка встаёт туда и чуть масштабируется с расстоянием до камеры;
+   тонкая линия тянется от середины связи к карточке. Карточки проекта и их сдвиги запоминаются в браузере. */
+const MAX_CARDS = 5;
+const cards = new Map();          // ключ связи «from>to» → { key, el, rec, off: { '2d': [x,y,z], '3d': … }, line, sig }
+const savedCards = loadPref('cards', {});   // { проект: [{ key, off }] }
+const cardLines = new THREE.Group();
+scene.add(cardLines);
+let cardZ = 1, fitDistance = 100, hoveredCard = null, cardDrag = null;
+const edgeKey = (r) => r.e.from + '>' + r.e.to;
+const apiEdge = (key) => view?.edges.find((r) => r.hit && edgeKey(r) === key) || null;
+
+function saveCards() {
+  savedCards[current] = [...cards.values()].map((c) => ({ key: c.key, off: c.off }));
+  savePref('cards', savedCards);
+  $('closeCards').hidden = !cards.size;
+  $('closeCards').textContent = `Закрыть детали (${cards.size})`;
+}
+
+function toast(text) {
+  $('toast').textContent = text;
+  $('toast').classList.add('on');
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => $('toast').classList.remove('on'), 2600);
+}
+
+function renderCard(c) {
+  const sig = JSON.stringify([c.rec.e, c.rec.b.n.api]);
+  if (sig === c.sig) return;
+  c.sig = sig;
+  const body = c.el.querySelector('.card-body'), top = body.scrollTop;
+  c.el.querySelector('.card-head b').textContent = c.rec.e.label || c.rec.b.n.label;
+  body.innerHTML = cardHtml(c.rec);
+  body.scrollTop = top;
+}
+
+function numberCards() {
+  [...cards.values()].forEach((c, i) => { c.el.querySelector('.no').textContent = i + 1; });
+}
+
+function raiseCard(c) { c.el.style.zIndex = ++cardZ; }
+
+function createCard(key, off = {}) {
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.innerHTML = `<div class="card-head" title="Перетащите, чтобы отвести в сторону"><span class="no"></span><b></b>
+    <span class="grip">⠿ тащить</span><button class="close" aria-label="Закрыть">×</button></div><div class="card-body"></div>`;
+  el.style.visibility = 'hidden';
+  $('cards').append(el);
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+    new THREE.LineBasicMaterial({ color: EDGES.api.color, transparent: true, opacity: 0.55 }));
+  line.frustumCulled = false;
+  cardLines.add(line);
+  const c = { key, el, rec: null, off, line, sig: '' };
+  cards.set(key, c);
+  el.addEventListener('pointerdown', () => raiseCard(c));
+  el.addEventListener('pointerenter', () => { hoveredCard = c; applyHighlight(); });
+  el.addEventListener('pointerleave', () => { if (hoveredCard === c) { hoveredCard = null; applyHighlight(); } });
+  el.addEventListener('click', (ev) => {
+    const go = ev.target.closest('[data-go]');
+    if (ev.target.closest('.close')) closeCard(key);
+    else if (go) focusNode(go.dataset.go);
+  });
+  el.querySelector('.card-head').addEventListener('pointerdown', (ev) => startCardDrag(ev, c));
+  raiseCard(c);
+  return c;
+}
+
+function closeCard(key) {
+  const c = cards.get(key);
+  if (!c) return;
+  c.el.remove();
+  cardLines.remove(c.line);
+  c.line.geometry.dispose(); c.line.material.dispose();
+  cards.delete(key);
+  if (hoveredCard === c) hoveredCard = null;
+  numberCards();
+  saveCards();
+  applyHighlight();
+}
+
+// клик по связи: открыть карточку; уже открытую — поднять и мигнуть; шестая закрывает самую старую
+function openCard(rec) {
+  const key = edgeKey(rec);
+  let c = cards.get(key);
+  if (!c) {
+    if (cards.size >= MAX_CARDS) {
+      const oldest = cards.keys().next().value;
+      toast(`Открыто не больше ${MAX_CARDS} карточек — закрыл самую раннюю: ${cards.get(oldest).rec?.e.label || oldest}`);
+      closeCard(oldest);
+    }
+    c = createCard(key);
+    c.rec = rec;
+    renderCard(c);
+    numberCards();
+    saveCards();
+  }
+  raiseCard(c);
+  c.el.classList.remove('flash'); void c.el.offsetWidth; c.el.classList.add('flash');
+  applyHighlight();
+}
+
+// после перестройки схемы карточки находят свою связь заново; связь скрыта слоем — карточка прячется до её возвращения
+function bindCards() {
+  for (const c of cards.values()) {
+    c.rec = apiEdge(c.key);
+    if (c.rec) renderCard(c);
+  }
+}
+// при смене проекта — карточки этого проекта из сохранённых
+function restoreCards() {
+  for (const key of [...cards.keys()]) { const c = cards.get(key); c.el.remove(); cardLines.remove(c.line); cards.delete(key); }
+  for (const s of (savedCards[current] || []).slice(-MAX_CARDS)) createCard(s.key, s.off || {});
+  bindCards();
+  numberCards();
+  saveCards();
+}
+
+const cardMid = (c) => c.rec.curve.getPoint(0.5);
+const cardScale = (p) => THREE.MathUtils.clamp(fitDistance / camera.position.distanceTo(p), 0.6, 1);
+function toScreen(p) {
+  const v = p.clone().project(camera);
+  return { x: (v.x + 1) / 2 * innerWidth, y: (1 - v.y) / 2 * innerHeight, behind: v.z > 1 };
+}
+// точка экрана → мир, на плоскости через point, развёрнутой к камере
+function screenToPlane(x, y, point) {
+  pointer.set((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
+  ray.setFromCamera(pointer, camera);
+  dragPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()), point);
+  return ray.ray.intersectPlane(dragPlane, new THREE.Vector3());
+}
+
+// Место по умолчанию: справа от схемы (если там тесно — слева, иначе у края экрана) на высоте связи,
+// ниже уже открытых карточек, чтобы не накрывать их
+function autoPlace(c) {
+  const mid = cardMid(c);
+  const s = cardScale(mid);
+  const w = c.el.offsetWidth * s, h = c.el.offsetHeight * s;
+  const sr = { x0: Infinity, x1: -Infinity };
+  const box = new THREE.Box3().setFromObject(world);
+  for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
+    const p = toScreen(new THREE.Vector3(x, y, z));
+    sr.x0 = Math.min(sr.x0, p.x); sr.x1 = Math.max(sr.x1, p.x);
+  }
+  const top = $('top').getBoundingClientRect().bottom + 12;
+  const xMax = innerWidth - 12 - w;
+  let x0 = sr.x1 + 32;
+  if (x0 > xMax) x0 = sr.x0 - 32 - w >= 12 ? sr.x0 - 32 - w : xMax;
+  const y0 = THREE.MathUtils.clamp(toScreen(mid).y - 40, top, Math.max(top, innerHeight - 12 - h));
+  // свободное место ищем колонками: от выбранной — поочерёдно влево и вправо, но только в пределах экрана
+  const others = [...cards.values()].filter((o) => o !== c && o.placed).map((o) => o.el.getBoundingClientRect())
+    .concat(['legend', 'recent', 'info', 'legendBtn'].map((id) => $(id).getBoundingClientRect()).filter((r) => r.width && r.height));
+  // длинная карточка может уходить за нижний край (её тело прокручивается) — важно, чтобы было видно хотя бы MIN_SEEN
+  const MIN_SEEN = 240;
+  const seen = (y) => Math.min(h, innerHeight - 12 - y);
+  const clash = (x, y) => others.find((r) => x < r.right + 12 && x + w > r.left - 12 && y < r.bottom + 12 && y + seen(y) > r.top - 12);
+  const cols = [x0];
+  for (let k = 1; k < 8; k++) cols.push(x0 - k * (w + 16), x0 + k * (w + 16));
+  let spot = null;
+  for (const x of cols.filter((x) => x >= 12 && x <= xMax)) {
+    for (let y = y0, i = 0; i < 8 && seen(y) >= MIN_SEEN && !spot; i++) {
+      const hit = clash(x, y);
+      if (!hit) spot = [x, y]; else y = hit.bottom + 12;
+    }
+    if (spot) break;
+    for (let y = top, i = 0; i < 8 && seen(y) >= MIN_SEEN && !spot; i++) {
+      const hit = clash(x, y);
+      if (!hit) spot = [x, y]; else y = hit.bottom + 12;
+    }
+    if (spot) break;
+  }
+  // места нет — лесенкой от последней открытой карточки
+  const last = [...cards.values()].filter((o) => o !== c && o.placed).pop()?.el.getBoundingClientRect();
+  const [x, y] = spot || (last ? [Math.min(last.left + 28, xMax), Math.min(last.top + 28, innerHeight - 12 - MIN_SEEN)] : [Math.min(x0, xMax), y0]);
+  const p = screenToPlane(x, y, mid);
+  if (p) c.off[mode] = p.sub(mid).toArray();
+  saveCards();
+}
+
+function startCardDrag(ev, c) {
+  if (ev.button !== 0 || ev.target.closest('.close') || !c.rec || !c.off[mode]) return;
+  ev.preventDefault();
+  const wp = cardMid(c).add(new THREE.Vector3().fromArray(c.off[mode]));
+  const hit = screenToPlane(ev.clientX, ev.clientY, wp);
+  if (!hit) return;
+  cardDrag = { c, grab: hit.sub(wp), point: wp };
+  c.el.classList.add('dragging');
+  ev.currentTarget.setPointerCapture(ev.pointerId);
+}
+addEventListener('pointermove', (ev) => {
+  if (!cardDrag) return;
+  const { c, grab, point } = cardDrag;
+  const hit = screenToPlane(ev.clientX, ev.clientY, point);
+  if (hit) c.off[mode] = hit.sub(grab).sub(cardMid(c)).toArray();
+});
+function endCardDrag() {
+  if (!cardDrag) return;
+  cardDrag.c.el.classList.remove('dragging');
+  cardDrag = null;
+  saveCards();
+}
+addEventListener('pointerup', endCardDrag);
+addEventListener('pointercancel', endCardDrag);
+
+// каждый кадр: карточки — к своим точкам в пространстве, линии — от середины связи к карточке
+function updateCards() {
+  for (const c of cards.values()) {
+    const show = !!c.rec && !!world;
+    if (show && !c.off[mode] && !flight) autoPlace(c);
+    c.placed = show && !!c.off[mode];
+    c.line.visible = false;
+    if (!c.placed) { c.el.style.visibility = 'hidden'; continue; }
+    const mid = cardMid(c);
+    const wp = mid.clone().add(new THREE.Vector3().fromArray(c.off[mode]));
+    const p = toScreen(wp);
+    c.el.style.visibility = p.behind ? 'hidden' : '';
+    c.el.style.transform = `translate(${p.x}px, ${p.y}px) scale(${cardScale(wp)})`;
+    const pos = c.line.geometry.attributes.position;
+    pos.setXYZ(0, mid.x, mid.y, mid.z); pos.setXYZ(1, wp.x, wp.y, wp.z);
+    pos.needsUpdate = true;
+    c.line.visible = !p.behind;
+    c.el.classList.toggle('hl', hoveredEdge === c.rec);
+  }
+}
+$('closeCards').onclick = () => { for (const key of [...cards.keys()]) closeCard(key); };
 
 $('info').addEventListener('click', (ev) => {
   const go = ev.target.closest('[data-go]');
   const link = ev.target.closest('[data-link]');
-  if (link) { const rec = view.edges.find((r) => r.hit && r.e.from + '>' + r.e.to === link.dataset.link); if (rec) selectEdge(rec); }
+  if (link) { const rec = apiEdge(link.dataset.link); if (rec) openCard(rec); }
   else if (go) focusNode(go.dataset.go);
   else if (ev.target.closest('.close')) select(null);
 });
@@ -1178,7 +1423,7 @@ renderer.domElement.addEventListener('pointermove', (ev) => {
   const id = pick(ev);
   const edge = id ? null : pickEdge();
   renderer.domElement.style.cursor = id ? 'grab' : edge ? 'pointer' : '';
-  if (id !== hovered || edge !== hoveredEdge) { hovered = id; hoveredEdge = edge; applyHighlight(); }
+  if (id !== hovered || edge !== hoveredEdgeOnScene) { hovered = id; hoveredEdgeOnScene = edge; applyHighlight(); }
 });
 // перетаскивание слушаем на всём окне: курсор может уйти на панель, а отпустить блок можно где угодно
 addEventListener('pointermove', (ev) => { if (drag) moveDragged(ev); });
@@ -1195,7 +1440,7 @@ renderer.domElement.addEventListener('pointerup', (ev) => {
   if (!downAt || Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]) > 5) return;
   const id = pick(ev);
   const edge = id ? null : pickEdge();
-  if (edge) selectEdge(edge); else select(id);
+  if (edge) openCard(edge); else select(id);
 });
 addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { setLegendOpen(false); select(null); } });
 
@@ -1305,7 +1550,7 @@ function renderControls() {
 
 function rebuild(refit) {
   signature = '';
-  hovered = hoveredEdge = null;
+  hovered = hoveredEdge = hoveredEdgeOnScene = null;
   show();
   if (refit) fitCamera();
 }
@@ -1363,11 +1608,10 @@ function show() {
     const first = !signature && !world;
     signature = sig;
     const keep = selected;
-    const keepEdge = selectedEdge && selectedEdge.e.from + '>' + selectedEdge.e.to;
-    hoveredEdge = null;
+    hoveredEdge = hoveredEdgeOnScene = null;
     build(p);
-    const edge = keepEdge && view.edges.find((r) => r.hit && r.e.from + '>' + r.e.to === keepEdge);
-    if (edge) selectEdge(edge); else if (keep && view.nodes.has(keep)) select(keep); else select(null);
+    if (cardsOf !== current) { cardsOf = current; restoreCards(); } else bindCards();
+    if (keep && view.nodes.has(keep)) select(keep); else select(null);
     if (first) fitCamera();
     // /?node=<id>#проект — сразу открыть элемент (ссылка на элемент схемы, например с вики)
     if (nodeParam && view.nodes.has(nodeParam)) { focusNode(nodeParam); nodeParam = null; }
@@ -1375,6 +1619,7 @@ function show() {
     for (const n of p.nodes) { const v = view.nodes.get(n.id); if (v) v.n = n; }
     // описание адреса в openapi.json могло поменяться — свежие данные связи из нового ответа
     for (const r of view.edges) if (r.hit) r.e = p.edges.find((e) => e.from === r.e.from && e.to === r.e.to && e.kind === 'api') || r.e;
+    bindCards();
   }
   updateDocAlerts();
   updateRecent();
@@ -1445,12 +1690,13 @@ renderer.setAnimationLoop(() => {
       c.label.visible = px > 28;
     }
   }
+  updateCards();
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);
 });
 
 // доступ к состоянию схемы из консоли браузера — для отладки и автопроверок
-window.vizorDebug = { get view() { return view; }, get drag() { return drag; }, get camera() { return camera; }, get selectedEdge() { return selectedEdge; }, builds: 0 };
+window.vizorDebug = { get view() { return view; }, get drag() { return drag; }, get camera() { return camera; }, get cards() { return [...cards.values()]; }, builds: 0 };
 
 applyControls();
 pollArchitecture();
