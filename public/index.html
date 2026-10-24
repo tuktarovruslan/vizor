@@ -332,23 +332,27 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.screenSpacePanning = true;
 controls.maxDistance = 600;
-controls.zoomToCursor = true;   // колесо приближает к точке под курсором, а не к центру экрана
+controls.zoomToCursor = true;   // приближение — к точке под курсором, а не к центру экрана
 
-// Shift + колесо — сдвиг взгляда по горизонтали экрана (камера и точка, вокруг которой она вращается, вместе).
-// Слушатель на родителе в фазе захвата срабатывает раньше OrbitControls, и колесо не приближает.
-// Chrome при зажатом Shift отдаёт прокрутку в deltaX; щелчок колеса (~100) сдвигает примерно на 8 % ширины вида.
-const PAN_PER_NOTCH = 0.08;
+// Колесо двигает взгляд, как прокрутка страницы: просто колесо — по вертикали экрана, Shift + колесо — по горизонтали
+// (камера и точка, вокруг которой она вращается, вместе). Ctrl + колесо пропускаем в OrbitControls — он приближает.
+// Слушатель на родителе в фазе захвата срабатывает раньше OrbitControls. Chrome при Shift отдаёт прокрутку в deltaX;
+// тачпад прокручивает двумя пальцами сразу по обеим осям. Щелчок колеса (~100) — около 120 px экрана.
+const PAN_PX_PER_DELTA = 1.2;
 $('scene').addEventListener('wheel', (ev) => {
-  if (!ev.shiftKey || ev.ctrlKey) return;
+  if (ev.ctrlKey) return;
   ev.preventDefault();
   ev.stopPropagation();
-  const delta = ev.deltaX || ev.deltaY;
-  if (!delta) return;
+  const dx = ev.shiftKey ? ev.deltaX || ev.deltaY : ev.deltaX;
+  const dy = ev.shiftKey ? 0 : ev.deltaY;
+  if (!dx && !dy) return;
   flight = null;
   const dist = camera.position.distanceTo(controls.target);
-  const viewWidth = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect;
+  const unitsPerPx = (2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / innerHeight;
   const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
-  const shift = right.multiplyScalar((delta / 100) * PAN_PER_NOTCH * viewWidth);
+  const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+  // колесо вниз — вид едет вниз (схема уходит вверх), как у страницы
+  const shift = right.multiplyScalar(dx * PAN_PX_PER_DELTA * unitsPerPx).addScaledVector(up, -dy * PAN_PX_PER_DELTA * unitsPerPx);
   camera.position.add(shift);
   controls.target.add(shift);
 }, { capture: true, passive: false });
@@ -962,8 +966,8 @@ function applyControls() {
     ? { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
     : { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   $('hint').textContent = mode === '3d'
-    ? 'Тяните мышью — вращать, колесо — приблизить к курсору, Shift + колесо — сдвиг вбок, правая кнопка — сдвинуть. Блок можно перетащить. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.'
-    : 'Тяните мышью — сдвинуть, колесо — приблизить к курсору, Shift + колесо — сдвиг вбок. Блок можно перетащить. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.';
+    ? 'Тяните мышью — вращать, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору, правая кнопка — сдвинуть. Блок можно перетащить. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.'
+    : 'Тяните мышью — сдвинуть, колесо — сдвиг вверх-вниз, Shift + колесо — вбок, Ctrl + колесо — приблизить к курсору. Блок можно перетащить. Клик по блоку или по жёлтой связи «запрос к API» — карточка с подробностями рядом со схемой; её можно отвести за шапку, Esc закрывает верхнюю.';
 }
 
 function fitCamera() {
