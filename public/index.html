@@ -264,7 +264,7 @@
   <p class="sub">Чувствительность колеса мыши: меньше — медленнее, больше — быстрее</p>
   <div id="settingsRows"></div>
   <h3>Вращение слоя</h3>
-  <p class="sub">ЛКМ на названии слоя. Обычно колесо на себя вращает по часовой стрелке, от себя — против (если смотреть с конца оси)</p>
+  <p class="sub">ЛКМ на названии слоя. Обычно колесо на себя вращает вокруг X и Z против часовой стрелки, вокруг Y — по часовой (если смотреть с конца оси)</p>
   <div id="settingsInverts"></div>
   <div class="foot"><button id="settingsReset">По умолчанию</button></div>
 </aside>
@@ -2117,9 +2117,10 @@ addEventListener('wheel', (ev) => {
   ev.stopPropagation();
   const delta = ev.deltaY || ev.deltaX;   // Chrome при Shift отдаёт прокрутку в deltaX
   if (!delta) return;
-  // колесо на себя (delta > 0) — по часовой стрелке, если смотреть с конца оси (отрицательный угол); инверсия — в настройках
-  const [axis, inv] = ev.altKey ? [AXIS_Y, settings.invY] : ev.shiftKey ? [AXIS_Z, settings.invZ] : [AXIS_X, settings.invX];
-  const angle = -delta * FLOOR_ROT_PER_DELTA * (inv ? -1 : 1);
+  // направление по умолчанию для «колесо на себя» (delta > 0), если смотреть с конца оси:
+  // вокруг X и Z — против часовой стрелки (угол > 0), вокруг Y — по часовой (угол < 0); инверсия каждой оси — в настройках
+  const [axis, base, inv] = ev.altKey ? [AXIS_Y, -1, settings.invY] : ev.shiftKey ? [AXIS_Z, 1, settings.invZ] : [AXIS_X, 1, settings.invX];
+  const angle = delta * FLOOR_ROT_PER_DELTA * base * (inv ? -1 : 1);
   transformFloor(f, () => rotateFloor(f, axis, angle));
 }, { capture: true, passive: false });
 // Alt, пока слой зажат, не отдаём браузеру: на Windows отпускание Alt переводит фокус на меню окна
