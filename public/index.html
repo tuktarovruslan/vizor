@@ -149,9 +149,9 @@
   .lbl { font-size: 11px; color: #cfd6e2; white-space: nowrap; text-shadow: 0 1px 3px #000, 0 0 2px #000; padding-top: 4px; transition: opacity .3s ease; }
   .lbl.recent { color: var(--recent); font-weight: 600; }
   .lbl.hl { color: #fff; font-weight: 600; font-size: 12px; }
-  .cl { overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: #9fb0c9; white-space: nowrap; text-shadow: 0 1px 3px #000; letter-spacing: .03em; }
+  .cl { overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: #9fb0c9; white-space: nowrap; text-shadow: 0 1px 3px #000; letter-spacing: .03em; transition: color .3s ease; }
   .svc { font-size: 14px; font-weight: 600; white-space: nowrap; padding: 3px 10px; border-radius: 8px; background: rgba(13,16,22,.8);
-         border: 1px solid var(--border); display: flex; gap: 8px; align-items: center; }
+         border: 1px solid var(--border); display: flex; gap: 8px; align-items: center; transition: border-color .3s ease, box-shadow .3s ease; }
   .svc .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
   .svc.up .dot { background: var(--ok); } .svc.down .dot { background: var(--bad); }
   .svc .st { font-weight: 400; color: var(--muted); font-size: 12px; }
@@ -166,7 +166,7 @@
   .floor .sites a:hover { color: #9cc0ff; } .floor .sites a:hover small { color: #9cc0ff; }
   .floor.empty { opacity: .45; }
   /* заголовок слоя — ручка: за него слой перетаскивается целиком */
-  .floor .ttl { pointer-events: auto; cursor: grab; border-radius: 6px; padding: 0 4px; transition: background .2s, box-shadow .2s; }
+  .floor .ttl { pointer-events: auto; cursor: grab; border-radius: 6px; padding: 0 4px; transition: background .3s ease, box-shadow .3s ease; }
   .floor .ttl:hover, .floor.grab-hl .ttl { background: rgba(255, 255, 255, .08); box-shadow: 0 0 0 1px currentColor; }
   .floor.dragging .ttl { cursor: grabbing; }
   /* сервис и папка под курсором: подпись выделена, сама плитка подсвечена в сцене */
@@ -534,6 +534,7 @@ const HEIGHT = { tall: 2.6, cyl: 1.6, ball: 1.9, cone: 1.8, flat: 0.5, cube: 1.6
 function disposeWorld() {
   if (!world) return;
   fades.clear();
+  colorFades.clear();
   world.traverse((o) => {
     if (o.isCSS2DObject) o.element.remove();
     if (o.geometry && o.geometry !== GLOW_PLANE && !Object.values(GEOMS).includes(o.geometry)) o.geometry.dispose();
@@ -1114,20 +1115,31 @@ function neighbours(id) {
   return set;
 }
 
-// Подсветка меняется плавно: прозрачность материалов доводится до цели за FADE_MS (подписи — CSS-переходом той же длины)
+// Подсветка меняется плавно: прозрачность и цвет материалов доводятся до цели за FADE_MS (подписи — CSS-переходом той же длины)
 const FADE_MS = 300;
-const fades = new Map();   // материал → { from, to, t0 }
+const fades = new Map();        // материал → { from, to, t0 } — прозрачность
+const colorFades = new Map();   // материал → { from: Color, to: Color, t0 } — цвет
+const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 function fadeTo(mat, to) {
   const f = fades.get(mat);
   if ((f ? f.to : mat.opacity) === to) return;
   fades.set(mat, { from: mat.opacity, to, t0: performance.now() });
 }
+function fadeColorTo(mat, hexTo) {
+  const f = colorFades.get(mat);
+  if ((f ? f.to.getHex() : mat.color.getHex()) === hexTo) return;
+  colorFades.set(mat, { from: mat.color.clone(), to: new THREE.Color(hexTo), t0: performance.now() });
+}
 function stepFades(now) {
   for (const [mat, f] of fades) {
     const t = Math.min(1, (now - f.t0) / FADE_MS);
-    const k = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;   // ease-in-out
-    mat.opacity = f.from + (f.to - f.from) * k;
+    mat.opacity = f.from + (f.to - f.from) * easeInOut(t);
     if (t >= 1) fades.delete(mat);
+  }
+  for (const [mat, f] of colorFades) {
+    const t = Math.min(1, (now - f.t0) / FADE_MS);
+    mat.color.lerpColors(f.from, f.to, easeInOut(t));
+    if (t >= 1) colorFades.delete(mat);
   }
 }
 
@@ -1635,16 +1647,16 @@ function setHoverGroup(g) {
   const paint = (x, on) => {
     if (!x) return;
     if (x.type === 'cluster') {
-      x.cr.tile.material.color.setHex(on ? 0x3d5378 : 0x2a3446);
-      x.cr.tile.material.opacity = on ? 0.85 : 0.55;
+      fadeColorTo(x.cr.tile.material, on ? 0x3d5378 : 0x2a3446);
+      fadeTo(x.cr.tile.material, on ? 0.85 : 0.55);
       x.cr.label?.element.classList.toggle('grab-hl', on);
     } else if (x.type === 'platform') {
-      x.pl.slab.material.color.setHex(on ? 0x3a5684 : 0x1b2230);
-      x.pl.slab.material.opacity = on ? 0.95 : 0.85;
+      fadeColorTo(x.pl.slab.material, on ? 0x3a5684 : 0x1b2230);
+      fadeTo(x.pl.slab.material, on ? 0.95 : 0.85);
       x.pl.label.element.classList.toggle('grab-hl', on);
     } else {
-      x.floor.plane.material.opacity = on ? 0.16 : x.floor.plane.userData.planeOpacity;
-      x.floor.border.material.opacity = on ? 0.9 : 0.4;
+      fadeTo(x.floor.plane.material, on ? 0.16 : x.floor.plane.userData.planeOpacity);
+      fadeTo(x.floor.border.material, on ? 0.9 : 0.4);
       x.floor.label.element.classList.toggle('grab-hl', on);
     }
   };
