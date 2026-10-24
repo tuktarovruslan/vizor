@@ -877,6 +877,7 @@ function fitFrames(floor, anchorId = null) {
       }
     });
     const pr = moveRect(pl.rawRect, [px, pz]);
+    pl.rect = pr;   // текущая рамка платформы в плоскости этажа — из её углов и середин сторон выходит выноска карточки
     for (const o of [pl.slab, pl.outline]) o.position.set((pr.x0 + pr.x1) / 2, 0, (pr.z0 + pr.z1) / 2);
     if (setRounded(pl.slab, 'platform', pr.x1 - pr.x0, pr.z1 - pr.z0, slabBody)) {
       pl.outline.geometry.dispose();
@@ -1418,7 +1419,9 @@ const CARD_TYPE = {
   service: { many: 'сервисов', title: (t) => t.s.id, html: (t) => serviceHtml(t), color: (t) => svcColor(t.s.id),
              // состояние и время ответа меняются при каждом опросе статуса, блоки — при перестройке схемы
              sig: (t) => JSON.stringify([t.s, t.pl.floor, svcStatus(t.s.id), serviceStats(t.s.id).sig, Math.floor(Date.now() / 60000)]),
-             anchor: (t) => t.pl.group.localToWorld(t.pl.localCenter.clone()) },
+             anchor: (t) => t.pl.group.localToWorld(t.pl.localCenter.clone()),
+             // карточка привязана к центру платформы, а выноска выходит из ближайшего к карточке угла или середины стороны
+             leaderFrom: (t, r) => platformLeaderPoint(t.pl, r) },
 };
 
 // что известно о сервисе по схеме: блоки по слоям, адреса API, связи с другими сервисами, недавние правки
@@ -1633,9 +1636,27 @@ function screenToPlane(x, y, point) {
 // (по большему зазору: слева/справа или сверху/снизу), в ближайшую к якорю точку этой стороны, перпендикулярно ей.
 const LEADER_POINTS = 40;
 const tmpLeader = new THREE.Vector3();
-function leaderCurve(c, mid, wp, p) {
+// Точка выхода выноски у платформы: из 4 углов (на скруглении, под 45°) и 4 середин сторон верхней грани —
+// та, что на экране ближе всего к прямоугольнику карточки r
+function platformLeaderPoint(pl, r) {
+  const { x0, x1, z0, z1 } = pl.rect;
+  const k = Math.min(CORNER.platform, (x1 - x0) / 2, (z1 - z0) / 2) * (1 - Math.SQRT1_2);   // отступ точки на дуге угла
+  const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+  const candidates = [[x0 + k, z0 + k], [x1 - k, z0 + k], [x1 - k, z1 - k], [x0 + k, z1 - k], [cx, z0], [x1, cz], [cx, z1], [x0, cz]];
+  let best = null, bestD = Infinity;
+  for (const [x, z] of candidates) {
+    const w = pl.group.localToWorld(new THREE.Vector3(x, 0, z));
+    const q = toScreen(w);
+    const d = Math.hypot(Math.max(r.x0 - q.x, 0, q.x - r.x1), Math.max(r.y0 - q.y, 0, q.y - r.y1));
+    if (d < bestD) { bestD = d; best = w; }
+  }
+  return best;
+}
+
+function leaderCurve(c, anchor, wp, p) {
   const s = cardScale(wp) * c.size;
   const r = { x0: p.x, y0: p.y, x1: p.x + c.el.offsetWidth * s, y1: p.y + c.el.offsetHeight * s };
+  const mid = CARD_TYPE[c.type].leaderFrom?.(c.target, r) || anchor;
   const a = toScreen(mid);
   const gapX = Math.max(r.x0 - a.x, a.x - r.x1, 0), gapY = Math.max(r.y0 - a.y, a.y - r.y1, 0);
   if (!gapX && !gapY) return null;   // якорь под карточкой — линия не нужна
